@@ -15,7 +15,7 @@ const LOCAL_ROOT = path.resolve(process.cwd(), ".data");
 
 function localPath(key: string): string {
   const p = path.resolve(LOCAL_ROOT, key);
-  if (!p.startsWith(LOCAL_ROOT + path.sep)) throw new Error("bad key");
+  if (!p.startsWith(LOCAL_ROOT + path.sep)) throw new Error("不正なキー");
   return p;
 }
 
