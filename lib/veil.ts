@@ -5,6 +5,7 @@
  * - 地雷宣言をしていない読み手には何も伏せない
  * - 地雷宣言をしている読み手に対して、タグの無い投稿は「未確認」として伏せる
  * - タグが地雷語と一致（正規化後の完全一致、または語を含む）すれば伏せる
+ * - 書き手の注意文（cw）があれば最優先で伏せる
  *
  * 本文を落とすのは呼び出し側（timeline）の責務だが、判定はここに集める。
  */
@@ -18,7 +19,10 @@ export function normalizeWord(word: string): string {
   return word.normalize("NFKC").toLowerCase().trim();
 }
 
-export function veilFor(tags: readonly string[], muteWords: readonly string[]): Veil {
+export function veilFor(tags: readonly string[], muteWords: readonly string[], cw?: string | null): Veil {
+  const warning = cw?.trim();
+  if (warning) return { veiled: true, reason: warning };
+
   const mutes = muteWords.map(normalizeWord).filter((w) => w.length > 0);
   if (mutes.length === 0) return { veiled: false };
 

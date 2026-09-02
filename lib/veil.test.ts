@@ -30,3 +30,17 @@ describe("veilFor", () => {
     expect(veilFor(["最終回ネタバレ"], ["ネタバレ"])).toEqual({ veiled: true, reason: "ネタバレ" });
   });
 });
+
+describe("注意文（cw）", () => {
+  it("注意文があれば地雷宣言が無くても伏せ、理由は注意文そのもの", () => {
+    expect(veilFor(["推し"], [], "最終回の話")).toEqual({ veiled: true, reason: "最終回の話" });
+  });
+  it("注意文は地雷宣言より優先する", () => {
+    expect(veilFor(["ネタバレ"], ["ネタバレ"], "閲覧注意")).toEqual({ veiled: true, reason: "閲覧注意" });
+  });
+  it("注意文が空か null なら従来の判定に戻る", () => {
+    expect(veilFor(["推し"], ["ネタバレ"], "")).toEqual({ veiled: false });
+    expect(veilFor(["推し"], ["ネタバレ"], null)).toEqual({ veiled: false });
+    expect(veilFor([], ["ネタバレ"], null)).toEqual({ veiled: true, reason: UNCONFIRMED });
+  });
+});
