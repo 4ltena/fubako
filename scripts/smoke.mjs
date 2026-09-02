@@ -1,0 +1,59 @@
+// 開発用スモーク: 2 ユーザーのセッションを DB に直接作り、API を通しで叩く
+import "dotenv/config";
+import pg from "pg";
+const db = new pg.Client({ connectionString: process.env.DATABASE_URL }); await db.connect();
+const prisma = {
+  user: { upsert: async ({ where: { email }, create: { name } }) => (await db.query('INSERT INTO "User"(id,email,name) VALUES($1,$2,$3) ON CONFLICT(email) DO UPDATE SET name=EXCLUDED.name RETURNING *', [crypto.randomUUID(), email, name])).rows[0] },
+  session: { create: async ({ data: d }) => (await db.query('INSERT INTO "Session"(id,"sessionToken","userId",expires) VALUES($1,$2,$3,$4) RETURNING *', [crypto.randomUUID(), d.sessionToken, d.userId, d.expires])).rows[0] },
+  post: { findUnique: async ({ where: { id } }) => (await db.query('SELECT * FROM "Post" WHERE id=$1', [id])).rows[0] },
+  $disconnect: () => db.end(),
+};
+const BASE = "http://localhost:3000";
+const expires = new Date(Date.now() + 86400e3);
+async function sessionFor(email, name) {
+  const user = await prisma.user.upsert({ where: { email }, update: {}, create: { email, name } });
+  const s = await prisma.session.create({ data: { userId: user.id, sessionToken: crypto.randomUUID(), expires } });
+  return (path, init = {}) => fetch(BASE + path, { ...init, headers: { cookie: `authjs.session-token=${s.sessionToken}`, "content-type": "application/json", ...(init.headers ?? {}) }, redirect: "manual" });
+}
+const assert = (c, m) => { if (!c) { console.error("FAIL:", m); process.exit(1); } console.log("ok:", m); };
+await db.query(`DELETE FROM "Circle" WHERE "createdById" IN (SELECT id FROM "User" WHERE email LIKE '%@example.test')`);
+await db.query(`DELETE FROM "User" WHERE email LIKE '%@example.test'`);
+const A = await sessionFor("a@example.test", "A"), B = await sessionFor("b@example.test", "B");
+assert((await fetch(BASE + "/api/posts?circleId=x")).status === 401, "未ログインは 401");
+const circle = await (await A("/api/circles", { method: "POST", body: JSON.stringify({ name: "テスト" }) })).json();
+assert(circle.id && circle.inviteCode, "サークル作成");
+assert((await B("/api/posts?circleId=" + circle.id)).status === 404, "非会員には存在が見えない");
+assert((await B("/api/circles/join", { method: "POST", body: JSON.stringify({ inviteCode: circle.inviteCode }) })).ok, "招待コードで参加");
+const p1 = await (await A("/api/posts", { method: "POST", body: JSON.stringify({ circleId: circle.id, body: "ネタバレ本文", tags: "ネタバレ #最終回", days: "30" }) })).json();
+const p2 = await (await A("/api/posts", { method: "POST", body: JSON.stringify({ circleId: circle.id, body: "タグなし本文" }) })).json();
+const p3 = await (await A("/api/posts", { method: "POST", body: JSON.stringify({ circleId: circle.id, body: "無害本文", tags: "推し" }) })).json();
+let tl = (await (await B("/api/posts?circleId=" + circle.id)).json()).posts;
+assert(tl.length === 3 && tl.every((p) => !p.veiled && p.body), "地雷宣言なしなら全部開いている");
+const dbP1 = await prisma.post.findUnique({ where: { id: p1.id } });
+assert(dbP1.expiresAt.getTime() - dbP1.createdAt.getTime() <= 7 * 86400e3, "寿命 30 日指定は 7 日に丸められる");
+assert((await B("/api/me/mutes", { method: "POST", body: JSON.stringify({ word: "ねたばれ".normalize("NFKC") === "ねたばれ" ? "ネタバレ" : "x" }) })).ok, "地雷宣言");
+tl = (await (await B("/api/posts?circleId=" + circle.id)).json()).posts;
+const byId = Object.fromEntries(tl.map((p) => [p.id, p]));
+assert(byId[p1.id].veiled && byId[p1.id].reason === "ネタバレ" && !("body" in byId[p1.id]), "一致タグは伏せられ本文が無い");
+assert(byId[p2.id].veiled && byId[p2.id].reason === "未確認" && !("body" in byId[p2.id]), "未タグは未確認で伏せられる");
+assert(!byId[p3.id].veiled && byId[p3.id].body === "無害本文", "無害タグは開いている");
+assert((await (await B(`/api/posts/${p1.id}/reveal`)).json()).body === "ネタバレ本文", "reveal で本文が取れる");
+assert((await (await B(`/api/posts/${p1.id}/react`, { method: "POST" })).json()).reacted === true, "反応を付ける");
+assert((await (await B(`/api/posts/${p1.id}/react`, { method: "POST" })).json()).reacted === false, "反応を外す");
+assert((await B(`/api/posts/${p1.id}`, { method: "PATCH", body: JSON.stringify({ expiresAt: new Date(Date.now() + 365 * 86400e3).toISOString() }) })).status === 404, "他人の投稿は触れない");
+const r = await (await A(`/api/posts/${p1.id}`, { method: "PATCH", body: JSON.stringify({ expiresAt: new Date(Date.now() + 365 * 86400e3).toISOString() }) })).json();
+assert(r.expiresAt === byId[p1.id].expiresAt, "寿命は伸ばせない");
+await A(`/api/posts/${p1.id}`, { method: "PATCH", body: JSON.stringify({ expireNow: true }) });
+tl = (await (await B("/api/posts?circleId=" + circle.id)).json()).posts;
+assert(!tl.some((p) => p.id === p1.id), "期限切れは他人から消える");
+assert((await B(`/api/posts/${p1.id}/reveal`)).status === 404, "期限切れは reveal もできない");
+tl = (await (await A("/api/posts?circleId=" + circle.id)).json()).posts;
+assert(tl.some((p) => p.id === p1.id && p.body), "本人には期限切れでも見える");
+assert((await A(`/api/posts/${p2.id}`, { method: "DELETE" })).ok, "削除");
+assert(!((await (await A("/api/posts?circleId=" + circle.id)).json()).posts.some((p) => p.id === p2.id)), "削除後は本人にも見えない");
+assert((await fetch(BASE + "/api/cron/digest")).status === 401, "cron は秘密なしで 401");
+const page = await (await B("/c/" + circle.id)).text();
+assert(page.includes("noindex") && !page.includes("og:") && !page.includes("ネタバレ本文") && !page.includes("タグなし本文") && page.includes("無害本文"), "画面 HTML にも伏せた本文が無く noindex");
+assert((await (await fetch(BASE + "/robots.txt")).text()).includes("Disallow: /"), "robots.txt");
+await prisma.$disconnect();
+console.log("ALL OK");
