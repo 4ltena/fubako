@@ -44,3 +44,12 @@ next-env.d.ts
 /lib/generated
 /.superpowers
 /.data
+
+# エージェント指示ファイルは運用文脈であり成果物ではない
+CLAUDE.md
+AGENTS.md
+GEMINI.md
+.cursorrules
+.claude/
+.codex/
+.cursor/
