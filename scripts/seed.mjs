@@ -7,7 +7,7 @@ import pg from "pg";
 const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
 await db.connect();
 const id = () => crypto.randomUUID();
-const days = (n) => new Date(Date.now() + n * 86400e3);
+const days = (n) => new Date(Date.now() + n * 86400e3).toISOString(); // timestamp 列へは UTC の壁時計で入れる
 
 const USERS = [
   { email: "hinata@example.test", name: "ひなた" },
