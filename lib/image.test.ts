@@ -47,4 +47,14 @@ describe("processImage", () => {
   it("画像でなければ投げる", async () => {
     await expect(processImage(Buffer.from("not an image"))).rejects.toThrow();
   });
+
+  it("展開後の画素数が大きすぎる画像（展開爆弾）は投げる", async () => {
+    const bomb = await sharp({ create: { width: 7000, height: 7000, channels: 3, background: "#fff" } }).png().toBuffer();
+    await expect(processImage(bomb)).rejects.toThrow();
+  });
+
+  it("対応していない画像形式（TIFF）は投げる", async () => {
+    const tiff = await sharp({ create: { width: 10, height: 10, channels: 3, background: "#fff" } }).tiff().toBuffer();
+    await expect(processImage(tiff)).rejects.toThrow("対応していない画像形式");
+  });
 });

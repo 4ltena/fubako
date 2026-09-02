@@ -73,7 +73,7 @@ assert(!JSON.stringify(v4).includes("/api/images/"), "伏せた応答に取得�
 const opened = await (await B(`/api/posts/${p4.id}/reveal`)).json();
 assert(opened.body === "画像つき本文" && opened.imageIds.length === 2, "reveal で本文と画像 ID が取れる");
 const img = await B(`/api/images/${opened.imageIds[0]}`);
-assert(img.ok && img.headers.get("content-type") === "image/webp" && img.headers.get("cache-control").includes("private"), "画像本体が WebP で取れる");
+assert(img.ok && img.headers.get("content-type") === "image/webp" && img.headers.get("cache-control").includes("private") && img.headers.get("x-robots-tag") === "noindex", "画像本体が WebP で取れる");
 const C = await sessionFor("c@example.test", "C");
 assert((await C(`/api/images/${opened.imageIds[0]}`)).status === 404, "非会員は画像を取れない");
 await A(`/api/posts/${p4.id}`, { method: "PATCH", body: JSON.stringify({ expireNow: true }) });
