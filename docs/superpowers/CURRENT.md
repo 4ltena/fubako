@@ -13,10 +13,12 @@
 
 ## 検証
 
-- `npm test` 21件 pass（veil / visibility / image）
+- `npm test` 23件 pass（veil / visibility / image。画像はピクセル上限 4000万と実フォーマット検証を含む）
 - `npm run typecheck`・`npm run lint` エラー無し
 - `npm run build` 成功
-- `npm run smoke` 35項目 ALL OK（本番ビルドを `next start` して API を通しで確認。画像つき投稿の作成・伏せ・reveal・`/api/images/:id` の代理取得・非会員/期限切れの遮断・4MB 超の 413 を追加）
+- `npm run smoke` 35項目 ALL OK（本番ビルドを `next start` して API を通しで確認。画像つき投稿の作成・伏せ・reveal・`/api/images/:id` の代理取得と `X-Robots-Tag: noindex`・非会員/期限切れの遮断・4MB 超の 413 を追加）
+- りん視点のタイムライン HTML を curl で取得し、注意文つき投稿は理由だけが出て本文も `/api/images/` も含まれず、blurhash 文字列だけが載ることを確認。reveal 後の画像は WebP 1200×800 で EXIF 無し
+- 未実施: ブラウザでの目視（拡張が未接続）。`npm run dev` と `npm run seed` のリンクで確認できる
 - `npm run seed` で仮ユーザー5人（*@example.test）とサークル・投稿（注意文つき1件を含む）・地雷宣言を投入し、りん視点で「ネタバレ」「愚痴」が伏せられ期限切れが消えることを API で確認
 - 未検証: マジックリンクのメール送信、Discord OAuth、ダイジェストの実送信（ローカルに SMTP が無い）
 
@@ -29,6 +31,10 @@
 ## 阻害要因
 
 無し。
+
+## ブランチ
+
+`feat/images-cw`（main の `85307b3` から）。実装は Workflow（Sonnet）でタスクごとにレビュー済み、最終レビュー 3 視点と修正波、背景セキュリティレビューの 2 件も反映済み。main への統合は未実施。
 
 ## レビュー裁定
 
