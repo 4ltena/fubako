@@ -1,4 +1,5 @@
 import { ActionButton } from "@/components/ActionButton";
+import { ImageGrid } from "@/components/PostCard";
 import { currentUserId } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
@@ -10,7 +11,7 @@ export default async function ArchivePage() {
   const userId = (await currentUserId())!;
   const posts = await prisma.post.findMany({
     where: { authorId: userId, deletedAt: null },
-    include: { circle: { select: { name: true } } },
+    include: { circle: { select: { name: true } }, images: { orderBy: { createdAt: "asc" }, select: { id: true } } },
     orderBy: { createdAt: "desc" },
   });
   return (
@@ -25,7 +26,9 @@ export default async function ArchivePage() {
               <span>{p.createdAt.toLocaleString("ja-JP")}</span>
               <span className="ml-auto">{isExpired(p.expiresAt) ? "期限切れ" : "公開中"}</span>
             </div>
+            {p.cw && <p className="mt-2 text-xs text-ink-soft">注意文: {p.cw}</p>}
             <p className="mt-2 whitespace-pre-wrap">{p.body}</p>
+            <ImageGrid ids={p.images.map((i) => i.id)} />
             {p.tags.length > 0 && <p className="mt-1 text-xs text-ink-soft">{p.tags.map((t) => `#${t}`).join(" ")}</p>}
             <div className="mt-2 flex gap-3 text-xs">
               {!isExpired(p.expiresAt) && (
