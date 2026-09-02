@@ -4,9 +4,11 @@ import { veilFor } from "@/lib/veil";
 import { isVisibleTo } from "@/lib/visibility";
 
 /**
- * 読み手に渡す投稿。伏せた投稿は body を持たない（サーバ側で落とす）。
+ * 読み手に渡す投稿。伏せた投稿は body と画像 ID を持たない（サーバ側で落とす）。
  * 反応の数は持たない。自分が反応したかだけ持つ。
  */
+export type TimelineImage = { blurhash: string; width: number; height: number };
+
 export type TimelinePost = {
   id: string;
   authorName: string;
@@ -15,7 +17,8 @@ export type TimelinePost = {
   createdAt: string;
   expiresAt: string;
   reacted: boolean;
-} & ({ veiled: false; body: string } | { veiled: true; reason: string });
+  images: TimelineImage[];
+} & ({ veiled: false; body: string; imageIds: string[] } | { veiled: true; reason: string });
 
 export async function muteWordsOf(userId: string): Promise<string[]> {
   const rules = await prisma.muteRule.findMany({ where: { userId }, select: { word: true } });
@@ -36,7 +39,11 @@ export async function timelineFor(userId: string, circleId: string): Promise<Tim
       where: { circleId, deletedAt: null, OR: [{ expiresAt: { gt: now } }, { authorId: userId }] },
       orderBy: { createdAt: "desc" },
       take: 100,
-      include: { author: { select: { name: true } }, reactions: { where: { userId }, select: { userId: true } } },
+      include: {
+        author: { select: { name: true } },
+        reactions: { where: { userId }, select: { userId: true } },
+        images: { orderBy: { createdAt: "asc" }, select: { id: true, blurhash: true, width: true, height: true } },
+      },
     }),
     muteWordsOf(userId),
   ]);
@@ -51,9 +58,12 @@ export async function timelineFor(userId: string, circleId: string): Promise<Tim
         createdAt: p.createdAt.toISOString(),
         expiresAt: p.expiresAt.toISOString(),
         reacted: p.reactions.length > 0,
+        images: p.images.map(({ blurhash, width, height }) => ({ blurhash, width, height })),
       };
       // 自分の投稿は伏せない
-      const veil = p.authorId === userId ? { veiled: false as const } : veilFor(p.tags, mutes);
-      return veil.veiled ? { ...common, veiled: true, reason: veil.reason } : { ...common, veiled: false, body: p.body };
+      const veil = p.authorId === userId ? { veiled: false as const } : veilFor(p.tags, mutes, p.cw);
+      return veil.veiled
+        ? { ...common, veiled: true, reason: veil.reason }
+        : { ...common, veiled: false, body: p.body, imageIds: p.images.map((i) => i.id) };
     });
 }

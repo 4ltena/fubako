@@ -9,9 +9,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const userId = await requireUser();
   if (userId instanceof NextResponse) return userId;
   const { id } = await params;
-  const post = await prisma.post.findUnique({ where: { id } });
+  const post = await prisma.post.findUnique({
+    where: { id },
+    include: { images: { orderBy: { createdAt: "asc" }, select: { id: true } } },
+  });
   if (!post || !(await isMember(userId, post.circleId)) || !isVisibleTo(post, userId)) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
-  return NextResponse.json({ body: post.body });
+  return NextResponse.json({ body: post.body, imageIds: post.images.map((i) => i.id) });
 }
