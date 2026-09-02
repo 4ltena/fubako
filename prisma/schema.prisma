@@ -92,6 +92,8 @@ model Post {
   createdAt DateTime  @default(now())
   expiresAt DateTime
   deletedAt DateTime?
+  cw        String?
+  images    Image[]
   circle    Circle    @relation(fields: [circleId], references: [id], onDelete: Cascade)
   author    User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
   reactions Reaction[]
@@ -118,4 +120,18 @@ model MuteRule {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, word])
+}
+
+model Image {
+  id        String   @id @default(cuid())
+  postId    String
+  key       String   @unique
+  blurhash  String
+  width     Int
+  height    Int
+  bytes     Int
+  createdAt DateTime @default(now())
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId, createdAt])
 }
