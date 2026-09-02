@@ -39,12 +39,13 @@ const POSTS = [
   [yuu, "次のイベント誰か行く？", ["イベント"], 3],
   [sora, "ちょっと愚痴。運営の告知が遅い", ["愚痴"], 1],
   [hinata, "先週の投稿。もう他の人には見えていない", ["配信"], -1],
+  [yuu, "注意文つき。開くまで誰にも本文が見えない", ["イベント"], 7, "会場の写真の話"],
 ];
 const postIds = [];
-for (const [author, body, tags, d] of POSTS) {
+for (const [author, body, tags, d, cw = null] of POSTS) {
   const pid = id();
   postIds.push(pid);
-  await db.query(`INSERT INTO "Post"(id,"circleId","authorId",body,tags,"expiresAt","createdAt") VALUES($1,$2,$3,$4,$5,$6,$7)`, [pid, circleId, author, body, tags, days(d), days(d - 7)]);
+  await db.query(`INSERT INTO "Post"(id,"circleId","authorId",body,tags,"expiresAt","createdAt",cw) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, [pid, circleId, author, body, tags, days(d), days(d - 7), cw]);
 }
 // 地雷宣言: りんは「ネタバレ」と「愚痴」を見たくない。ゆうは何も宣言していない
 for (const w of ["ネタバレ", "愚痴"]) await db.query(`INSERT INTO "MuteRule"(id,"userId",word) VALUES($1,$2,$3)`, [id(), rin, w]);

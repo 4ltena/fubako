@@ -1,6 +1,7 @@
 // 開発用スモーク: 2 ユーザーのセッションを DB に直接作り、API を通しで叩く
 import "dotenv/config";
 import pg from "pg";
+import sharp from "sharp";
 const db = new pg.Client({ connectionString: process.env.DATABASE_URL }); await db.connect();
 const prisma = {
   user: { upsert: async ({ where: { email }, create: { name } }) => (await db.query('INSERT INTO "User"(id,email,name) VALUES($1,$2,$3) ON CONFLICT(email) DO UPDATE SET name=EXCLUDED.name RETURNING *', [crypto.randomUUID(), email, name])).rows[0] },
@@ -13,7 +14,10 @@ const expires = new Date(Date.now() + 86400e3);
 async function sessionFor(email, name) {
   const user = await prisma.user.upsert({ where: { email }, update: {}, create: { email, name } });
   const s = await prisma.session.create({ data: { userId: user.id, sessionToken: crypto.randomUUID(), expires } });
-  return (path, init = {}) => fetch(BASE + path, { ...init, headers: { cookie: `authjs.session-token=${s.sessionToken}`, "content-type": "application/json", ...(init.headers ?? {}) }, redirect: "manual" });
+  return (path, init = {}) => {
+    const headers = Object.fromEntries(Object.entries({ cookie: `authjs.session-token=${s.sessionToken}`, "content-type": "application/json", ...(init.headers ?? {}) }).filter(([, v]) => v !== undefined));
+    return fetch(BASE + path, { ...init, headers, redirect: "manual" });
+  };
 }
 const assert = (c, m) => { if (!c) { console.error("FAIL:", m); process.exit(1); } console.log("ok:", m); };
 await db.query(`DELETE FROM "Circle" WHERE "createdById" IN (SELECT id FROM "User" WHERE email LIKE '%@example.test')`);
@@ -51,6 +55,37 @@ tl = (await (await A("/api/posts?circleId=" + circle.id)).json()).posts;
 assert(tl.some((p) => p.id === p1.id && p.body), "本人には期限切れでも見える");
 assert((await A(`/api/posts/${p2.id}`, { method: "DELETE" })).ok, "削除");
 assert(!((await (await A("/api/posts?circleId=" + circle.id)).json()).posts.some((p) => p.id === p2.id)), "削除後は本人にも見えない");
+// 画像と注意文
+const png = await sharp({ create: { width: 300, height: 200, channels: 3, background: "#e03030" } }).png().toBuffer();
+const form = new FormData();
+form.set("circleId", circle.id);
+form.set("body", "画像つき本文");
+form.set("cw", "写真あり");
+form.append("images", new Blob([png], { type: "image/png" }), "a.png");
+form.append("images", new Blob([png], { type: "image/png" }), "b.png");
+const p4 = await (await A("/api/posts", { method: "POST", body: form, headers: { "content-type": undefined } })).json();
+assert(p4.id, "画像つき投稿を作る");
+tl = (await (await B("/api/posts?circleId=" + circle.id)).json()).posts;
+const v4 = tl.find((p) => p.id === p4.id);
+assert(v4.veiled && v4.reason === "写真あり" && !("body" in v4) && !("imageIds" in v4), "注意文つきは地雷宣言に関係なく伏せられ、本文も画像 ID も無い");
+assert(v4.images.length === 2 && v4.images.every((i) => i.blurhash && i.width === 300 && !("id" in i) && !("url" in i)), "伏せた投稿には blurhash と寸法だけがある");
+assert(!JSON.stringify(v4).includes("/api/images/"), "伏せた応答に取得先が無い");
+const opened = await (await B(`/api/posts/${p4.id}/reveal`)).json();
+assert(opened.body === "画像つき本文" && opened.imageIds.length === 2, "reveal で本文と画像 ID が取れる");
+const img = await B(`/api/images/${opened.imageIds[0]}`);
+assert(img.ok && img.headers.get("content-type") === "image/webp" && img.headers.get("cache-control").includes("private"), "画像本体が WebP で取れる");
+const C = await sessionFor("c@example.test", "C");
+assert((await C(`/api/images/${opened.imageIds[0]}`)).status === 404, "非会員は画像を取れない");
+await A(`/api/posts/${p4.id}`, { method: "PATCH", body: JSON.stringify({ expireNow: true }) });
+assert((await B(`/api/images/${opened.imageIds[0]}`)).status === 404, "期限切れの画像は他人から取れない");
+assert((await A(`/api/images/${opened.imageIds[0]}`)).ok, "期限切れでも本人は画像を取れる");
+assert((await A(`/api/posts/${p4.id}`, { method: "DELETE" })).ok, "画像つき投稿を消す");
+assert((await A(`/api/images/${opened.imageIds[0]}`)).status === 404, "削除後は本人も画像を取れない");
+const tooBig = new FormData();
+tooBig.set("circleId", circle.id);
+tooBig.set("body", "大きすぎ");
+tooBig.append("images", new Blob([Buffer.alloc(4.5 * 1024 * 1024)], { type: "image/png" }), "big.png");
+assert((await A("/api/posts", { method: "POST", body: tooBig, headers: { "content-type": undefined } })).status === 413, "4MB 超は 413");
 assert((await fetch(BASE + "/api/cron/digest")).status === 401, "cron は秘密なしで 401");
 const page = await (await B("/c/" + circle.id)).text();
 assert(page.includes("noindex") && !page.includes("og:") && !page.includes("ネタバレ本文") && !page.includes("タグなし本文") && page.includes("無害本文"), "画面 HTML にも伏せた本文が無く noindex");
