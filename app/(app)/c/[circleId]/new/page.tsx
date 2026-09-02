@@ -8,7 +8,7 @@ export default async function NewPostPage({ params }: { params: Promise<{ circle
   const userId = (await currentUserId())!;
   if (!(await isMember(userId, circleId))) notFound();
   // そのサークルでよく使われた語をサジェスト（固定タグ体系は作らない）
-  const recent = await prisma.post.findMany({ where: { circleId, deletedAt: null }, select: { tags: true }, orderBy: { createdAt: "desc" }, take: 200 });
+  const recent = await prisma.post.findMany({ where: { circleId, deletedAt: null, expiresAt: { gt: new Date() } }, select: { tags: true }, orderBy: { createdAt: "desc" }, take: 200 });
   const freq = new Map<string, number>();
   for (const t of recent.flatMap((p) => p.tags)) freq.set(t, (freq.get(t) ?? 0) + 1);
   const suggested = [...freq.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12).map(([t]) => t);

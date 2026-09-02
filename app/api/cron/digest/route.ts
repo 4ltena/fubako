@@ -7,7 +7,8 @@ import { prisma } from "@/lib/db";
  * Vercel Cron が Authorization: Bearer CRON_SECRET で叩く。
  */
 export async function GET(req: Request) {
-  if (req.headers.get("authorization") !== `Bearer ${process.env.CRON_SECRET}`) {
+  const secret = process.env.CRON_SECRET;
+  if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -19,7 +20,7 @@ export async function GET(req: Request) {
       memberships: {
         select: {
           circle: {
-            select: { id: true, name: true, posts: { where: { createdAt: { gt: since }, deletedAt: null }, select: { authorId: true }, take: 1 } },
+            select: { id: true, name: true, posts: { where: { createdAt: { gt: since }, deletedAt: null, expiresAt: { gt: new Date() } }, select: { authorId: true }, take: 1 } },
           },
         },
       },
