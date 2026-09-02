@@ -29,6 +29,12 @@ export async function DELETE(_req: Request, { params }: Ctx) {
   if (!post) return NextResponse.json({ error: "not found" }, { status: 404 });
   await prisma.post.update({ where: { id }, data: { deletedAt: new Date() } });
   // Blob の削除失敗は投稿の削除を止めない。孤児の回収は作らない
-  await Promise.all(post.images.map((i) => deleteObject(i.key).catch((e) => console.error("image delete failed", i.key, e))));
+  await Promise.all(
+    post.images.map((i) =>
+      deleteObject(i.key).catch((e) =>
+        console.error(JSON.stringify({ event: "image_delete_failed", postId: id, imageId: i.id, key: i.key, error: String(e) })),
+      ),
+    ),
+  );
   return NextResponse.json({ ok: true });
 }
