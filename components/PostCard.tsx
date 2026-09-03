@@ -56,6 +56,17 @@ export function PostCard({ post }: { post: TimelinePost }) {
     if (r.ok) setOpened((await r.json()) as { body: string; imageIds: string[] });
     setLoading(false);
   }
+  /** 近い投稿まで運ぶ。ページは変えない。 */
+  function goToSimilar() {
+    const el = similarId === null ? null : document.getElementById(`post-${similarId}`);
+    if (el === null) return;
+    const before = window.scrollY;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    // 滑らかな移動が効かない環境では何も起きないことがある。動いていなければ飛ばす。
+    setTimeout(() => {
+      if (window.scrollY === before) el.scrollIntoView({ block: "center" });
+    }, 400);
+  }
   async function react() {
     setReacted(!reacted);
     const r = await fetch(`/api/posts/${post.id}/react`, { method: "POST" });
@@ -83,7 +94,7 @@ export function PostCard({ post }: { post: TimelinePost }) {
       {similarId && (
         <button
           type="button"
-          onClick={() => document.getElementById(`post-${similarId}`)?.scrollIntoView({ behavior: "smooth", block: "center" })}
+          onClick={goToSimilar}
           className="mt-2 block text-xs text-ink-soft underline"
         >
           近いことを書いた人がいます
