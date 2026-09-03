@@ -1,12 +1,14 @@
 import { redirect } from "next/navigation";
 import { auth, signIn } from "@/lib/auth";
 
-export default async function LoginPage() {
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ dev?: string }> }) {
   if ((await auth())?.user) redirect("/");
+  const stale = (await searchParams).dev === "stale";
   const discordEnabled = Boolean(process.env.AUTH_DISCORD_ID);
   return (
     <main className="mx-auto w-full max-w-md flex-1 px-5 pt-16">
       <h1 className="text-3xl leading-[1.6] tracking-[0.16em]">ふばこ</h1>
+      {stale && <p className="label mt-4 text-[11px] tracking-[0.1em] text-ink-faint">そのリンクはもう使えません。</p>}
       <p className="mt-4 text-sm leading-[2.25] text-ink-soft">招待された人だけが入れる、小さな場。返信欄と DM はありません。反応は一種類だけで、数は誰にも見えません。</p>
       <div className="mt-8 space-y-3">
         {discordEnabled && (
