@@ -10,9 +10,9 @@ export function SideRail({ circles }: { circles: { id: string; name: string }[] 
   const path = usePathname();
   const here = path.match(/^\/c\/([^/]+)/)?.[1];
   const item = (active: boolean) =>
-    `rounded-full px-5 py-3.5 text-sm tracking-[0.1em] ${active ? "bg-card text-ink shadow-paper" : "text-ink-faint"}`;
+    `overflow-hidden break-all rounded-full px-5 py-3.5 text-sm tracking-[0.1em] ${active ? "bg-card text-ink shadow-paper" : "text-ink-faint"}`;
   return (
-    <nav className="hidden w-[264px] shrink-0 flex-col gap-[30px] px-6 py-10 md:flex">
+    <nav className="hidden w-[264px] shrink-0 flex-col gap-[30px] px-6 py-10 lg:flex">
       <Link href="/" className="label text-[11px] tracking-[0.24em] text-ink-soft">ふばこ</Link>
 
       <div className="flex flex-col gap-1.5">

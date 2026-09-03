@@ -1,5 +1,6 @@
 "use client";
 import { useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Blurhash } from "@/components/Blurhash";
 import type { Form } from "@/lib/form";
@@ -21,19 +22,24 @@ export function ImageGrid({ ids }: { ids: string[] }) {
           </li>
         ))}
       </ul>
-      {open && (
-        // その場で大きく見る。枚数も順番も出さない。
-        <div
-          role="dialog"
-          aria-modal="true"
-          onClick={() => setOpen(null)}
-          className="fixed inset-0 z-30 flex items-center justify-center bg-paper/90 p-6"
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={`/api/images/${open}`} alt="" className="max-h-full max-w-full rounded-[26px] object-contain shadow-lift" />
-          <button type="button" onClick={() => setOpen(null)} className="label absolute right-6 top-6 rounded-full bg-card px-4 py-2 text-[11px] tracking-[0.14em] text-ink-soft shadow-paper">とじる</button>
-        </div>
-      )}
+      {open &&
+        // じぶんの箱では紙が傾いている（transform）ので、その中に置くと
+        // fixed の基準がその紙になってしまう。body の直下に出す。
+        createPortal(
+          <div
+            role="dialog"
+            aria-modal="true"
+            onClick={() => setOpen(null)}
+            className="fixed inset-0 z-30 flex items-center justify-center bg-paper/90 p-6"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={`/api/images/${open}`} alt="" className="max-h-full max-w-full rounded-[26px] object-contain shadow-lift" />
+            <button type="button" onClick={() => setOpen(null)} className="label absolute right-6 top-6 rounded-full bg-card px-4 py-2 text-[11px] tracking-[0.14em] text-ink-soft shadow-paper">
+              とじる
+            </button>
+          </div>,
+          document.body,
+        )}
     </>
   );
 }
@@ -45,7 +51,7 @@ export function ImageGrid({ ids }: { ids: string[] }) {
 function Wearing({ id, wear }: { id: string; wear: number }) {
   if (wear <= 0) return null;
   return (
-    <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[26px]">
+    <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden rounded-[26px]">
       <div className="absolute inset-0" style={{ backgroundImage: paperTexture(id, wear) }} />
       {isFolded(wear) && <div className={`absolute top-0 h-7 w-7 ${foldsRight(id) ? "right-0" : "left-0"}`} style={foldStyle(id)} />}
     </div>
@@ -73,18 +79,13 @@ export function PostBody({ form, body, imageIds }: { form: Form; body: string; i
   );
 }
 
-function Meta({ name, at, trailing }: { name: string; at: string; trailing?: ReactNode }) {
-  const t = new Date(at);
-  const today = new Date();
-  const sameDay = t.toDateString() === today.toDateString();
-  const hhmm = `${`${t.getHours()}`.padStart(2, "0")}:${`${t.getMinutes()}`.padStart(2, "0")}`;
+function Meta({ name, at, stamp, note, trailing }: { name: string; at: string; stamp: string; note?: string; trailing?: ReactNode }) {
   return (
     <div className="flex items-baseline gap-3 text-xs text-ink-soft">
       <span className="text-ink">{name}</span>
-      {/* 今日の紙は時刻だけ。前の日の紙は日付も添える（「3分前」のような相対表記は使わない） */}
-      <time dateTime={at} className="tracking-[0.12em]">
-        {sameDay ? hhmm : `${t.getMonth() + 1}月${t.getDate()}日　${hhmm}`}
-      </time>
+      {/* 時刻は lib/stamp.ts が JST で作ったものをそのまま出す */}
+      <time dateTime={at} className="tracking-[0.12em]">{stamp}</time>
+      {note && <span className="label text-[11px] tracking-[0.08em] text-ink-faint">{note}</span>}
       {trailing}
     </div>
   );
@@ -143,6 +144,7 @@ export function PostCard({
   /** この紙を自分のためだけに伏せる。書き手には何も届かない。あとから戻せる。 */
   async function veilForMe() {
     setLoading(true);
+    setMenuOpen(false);
     const r = await fetch(`/api/posts/${post.id}/veil`, { method: "POST" });
     if (r.ok) {
       setRevealed(null);
@@ -166,6 +168,7 @@ export function PostCard({
   }
   async function unveilForMe() {
     setLoading(true);
+    setMenuOpen(false);
     const r = await fetch(`/api/posts/${post.id}/veil`, { method: "DELETE" });
     if (r.ok) router.refresh();
     setLoading(false);
@@ -188,8 +191,16 @@ export function PostCard({
           <button type="button" aria-hidden tabIndex={-1} onClick={() => setMenuOpen(false)} className="fixed inset-0 z-10 cursor-default" />
           <span className="absolute right-0 top-9 z-20 block w-max rounded-[28px] bg-card p-2.5 text-sm tracking-[0.06em] shadow-lift">
             {post.mine ? (
-              <button type="button" onClick={pullBack} disabled={loading} className="block w-full rounded-[20px] px-[18px] py-[15px] text-left">
-                いま引き取る
+              post.returned ? (
+                <span className="block w-max px-[18px] py-[15px] text-ink-faint">もう他の人からは見えません</span>
+              ) : (
+                <button type="button" onClick={pullBack} disabled={loading} className="block w-full rounded-[20px] px-[18px] py-[15px] text-left">
+                  いま引き取る
+                </button>
+              )
+            ) : post.veiled && post.kind === "self" ? (
+              <button type="button" onClick={unveilForMe} disabled={loading} className="block w-full rounded-[20px] px-[18px] py-[15px] text-left">
+                伏せたのを戻す
               </button>
             ) : (
               <button type="button" onClick={veilForMe} disabled={loading} className="block w-full rounded-[20px] px-[18px] py-[15px] text-left">
@@ -215,10 +226,10 @@ export function PostCard({
 
   if (opened === null) {
     return (
-      <article id={`post-${post.id}`} className="relative overflow-hidden rounded-[26px] bg-veil px-[22px] pb-4 pt-5">
+      <article id={`post-${post.id}`} className="relative rounded-[26px] bg-veil px-[22px] pb-4 pt-5">
         <Wearing id={post.id} wear={wear} />
         <div className="relative">
-          <Meta name={post.authorName} at={post.createdAt} trailing={post.veiled && post.kind === "unconfirmed" ? undefined : menu} />
+          <Meta name={post.authorName} at={post.createdAt} stamp={post.stamp} trailing={post.veiled && post.kind === "unconfirmed" ? undefined : menu} />
           {/* 紙全体がタップ領域。右下の「ひらく」は目安 */}
           <button onClick={reveal} disabled={loading} className="mt-3 block w-full text-left">
             {post.images.length > 0 ? (
@@ -247,10 +258,10 @@ export function PostCard({
   }
 
   return (
-    <article id={`post-${post.id}`} className="relative overflow-hidden rounded-[26px] bg-card px-[22px] pb-4 pt-5 shadow-paper">
+    <article id={`post-${post.id}`} className="relative rounded-[26px] bg-card px-[22px] pb-4 pt-5 shadow-paper">
       <Wearing id={post.id} wear={wear} />
       <div className="relative">
-        <Meta name={post.authorName} at={post.createdAt} trailing={menu} />
+        <Meta name={post.authorName} at={post.createdAt} stamp={post.stamp} note={post.returned ? "もどってきた" : undefined} trailing={menu} />
         <PostBody form={form} body={opened.body} imageIds={opened.imageIds} />
         {post.veiled && (
           // 開けた紙は、伏せてあったことを一行残してまた伏せられる（デザイン案 1g）

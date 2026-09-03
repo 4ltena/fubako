@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import type { Form } from "@/lib/form";
 import { presentToday, shouldTouchSeen } from "@/lib/presence";
 import { pickSimilar } from "@/lib/similar";
+import { jstStamp } from "@/lib/stamp";
 import { veilFor, type VeilKind } from "@/lib/veil";
 import { isVisibleTo } from "@/lib/visibility";
 
@@ -21,7 +22,11 @@ export type TimelinePost = {
   authorName: string;
   mine: boolean;
   createdAt: string;
+  /** 画面に出す時刻。サーバ側で JST に固定して作る（端末で組み立てると描き直しが起きる）。 */
+  stamp: string;
   expiresAt: string;
+  /** 自分の紙が、もう他の人から見えなくなっているか。他人の紙では常に false。 */
+  returned: boolean;
   reacted: boolean;
   images: TimelineImage[];
 } & (
@@ -102,7 +107,9 @@ export async function timelineFor(userId: string, circleId: string): Promise<Tim
         authorName: p.author.name ?? "名無し",
         mine: p.authorId === userId,
         createdAt: p.createdAt.toISOString(),
+        stamp: jstStamp(p.createdAt, now),
         expiresAt: p.expiresAt.toISOString(),
+        returned: p.authorId === userId && p.expiresAt.getTime() <= now.getTime(),
         reacted: p.reactions.length > 0,
         images: p.images.map(({ blurhash, width, height }) => ({ blurhash, width, height })),
       };

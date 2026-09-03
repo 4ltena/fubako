@@ -14,8 +14,8 @@ export default async function SheetNewPost({ params }: { params: Promise<{ circl
   const suggested = await suggestedTags(circleId);
   const circle = (await prisma.circle.findUnique({ where: { id: circleId }, select: { name: true } }))!;
   return (
-    <SheetShell circleId={circleId} title={`${circle.name}へ`}>
-      <NewPostForm circleId={circleId} suggested={suggested} draftKey={`${userId}:${circleId}`} />
+    <SheetShell title={`${circle.name}へ`}>
+      <NewPostForm circleId={circleId} suggested={suggested} draftKey={`${userId}:${circleId}`} afterPost="back" />
     </SheetShell>
   );
 }

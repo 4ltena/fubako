@@ -19,7 +19,7 @@ async function shrink(file: File): Promise<Blob> {
   return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob"))), "image/jpeg", 0.85));
 }
 
-export function NewPostForm({ circleId, suggested, draftKey }: { circleId: string; suggested: string[]; draftKey: string }) {
+export function NewPostForm({ circleId, suggested, draftKey, afterPost = "push" }: { circleId: string; suggested: string[]; draftKey: string; afterPost?: "push" | "back" }) {
   const router = useRouter();
   const [images, setImages] = useState<{ blob: Blob; url: string }[]>([]);
   const [busy, setBusy] = useState(false);
@@ -77,7 +77,9 @@ export function NewPostForm({ circleId, suggested, draftKey }: { circleId: strin
       // 投げ終わった本文を端末に残さない
       if (timer.current) clearTimeout(timer.current);
       clearDraft(draftKey, browserStore());
-      router.push(`/c/${circleId}`);
+      // 重ねて出しているときは履歴を1つ戻す（push すると「戻る」でまた開く）
+      if (afterPost === "back") router.back();
+      else router.push(`/c/${circleId}`);
       router.refresh();
       return;
     }

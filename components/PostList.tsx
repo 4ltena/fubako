@@ -21,12 +21,14 @@ export function PostList({ posts, wears, circleId }: { posts: TimelinePost[]; we
   const [busy, setBusy] = useState(false);
   const [fresh, setFresh] = useState(false);
   const router = useRouter();
-  const newest = posts[0]?.createdAt ?? null;
+  // 1枚も無い箱でも、開いたときから後に置かれた紙は拾う
+  const [openedAt] = useState(() => new Date().toISOString());
+  const newest = posts[0]?.createdAt ?? openedAt;
 
   // 新しい紙が来たかを、画面が前面のときだけ見にいく。件数は聞かないし、
   // 来ていても並びは変えない（読み手が「読みこむ」を押すまで動かさない）。
   useEffect(() => {
-    if (newest === null || fresh) return;
+    if (fresh) return;
     let alive = true;
     const look = async () => {
       if (document.visibilityState !== "visible") return;

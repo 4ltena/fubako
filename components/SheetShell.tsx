@@ -6,12 +6,15 @@ import { useEffect } from "react";
  * 重ねて出す紙の器。
  * 背後のタイムラインは暗幕で覆わず、地の色を薄く敷いて沈めるだけ（デザイン案 1f の注記）。
  */
-export function SheetShell({ circleId, title, children }: { circleId: string; title: string; children: React.ReactNode }) {
+export function SheetShell({ title, children }: { title: string; children: React.ReactNode }) {
   const router = useRouter();
-  const close = () => router.push(`/c/${circleId}`);
+  // 重ねて出したときは履歴を1つ戻す。push で閉じると「戻る」でまた開いてしまう。
+  const close = () => router.back();
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close();
+      // 変換中の Escape は「候補を取り消す」ためのもの。シートは閉じない。
+      if (e.key !== "Escape" || e.isComposing || e.keyCode === 229) return;
+      close();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
