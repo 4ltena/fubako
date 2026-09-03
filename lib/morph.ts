@@ -15,7 +15,7 @@
  */
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -54,6 +54,9 @@ const FORMAT_ARGS = [
 
 /** 感情語として拾っても意味の薄い動詞。 */
 const WEAK_VERBS = new Set(["する", "居る", "有る", "成る", "遣る", "為る", "いる", "ある", "なる", "やる", "できる", "ゆく"]);
+
+/** タグ集合ごとのユーザー辞書。null は「作れなかった」。 */
+const dictCache = new Map<string, string | null>();
 
 let warned = false;
 function warnUnavailable(reason: string): void {
@@ -138,8 +141,8 @@ function runMecab(input: string, args: string[], bin: string, timeoutMs: number)
       }
       finish(Buffer.concat(chunks).toString("utf8"));
     });
-    // 改行は文の区切りにしない（1投稿を1続きの文として渡す）
-    child.stdin.end(`${input.replace(/\r?\n/g, "　")}\n`, "utf8");
+    // 改行とタブは全角空白に寄せる。改行で文を切らず、タブは出力の列区切りと衝突する。
+    child.stdin.end(`${input.replace(/[\r\n\t]/g, "　")}\n`, "utf8");
   });
 }
 
@@ -172,12 +175,35 @@ export async function userDictFrom(tags: readonly string[], options: { bin?: str
   const csv = userDictCsv(tags);
   if (csv.length === 0) return null;
   const hash = createHash("sha1").update(csv).digest("hex").slice(0, 16);
+  // 作れなかった場合も覚えておく。投稿のたびに mecab-dict-index を起こし直さない。
+  const cached = dictCache.get(hash);
+  if (cached !== undefined) return cached;
   const out = join(tmpdir(), `fubako-userdic-${hash}.dic`);
-  if (existsSync(out)) return out;
-  const dir = await mkdtemp(join(tmpdir(), "fubako-dict-"));
+  if (existsSync(out)) {
+    dictCache.set(hash, out);
+    return out;
+  }
+  // 辞書が作れなくても投稿は止めない。失敗はすべて「ユーザー辞書なし」に倒す。
+  let dir: string;
+  try {
+    dir = await mkdtemp(join(tmpdir(), "fubako-dict-"));
+  } catch (e) {
+    warnUnavailable(String(e));
+    dictCache.set(hash, null);
+    return null;
+  }
   const csvPath = join(dir, "user.csv");
-  await writeFile(csvPath, `${csv}\n`, "utf8");
-  const args = ["-d", options.dicdir ?? DICDIR, "-u", out, "-f", "utf-8", "-t", "utf-8", csvPath];
-  const ok = await runMecab("", args, options.bin ?? process.env.MECAB_DICT_INDEX ?? "mecab-dict-index", DEFAULT_TIMEOUT_MS);
-  return ok === null ? null : out;
+  let result: string | null = null;
+  try {
+    await writeFile(csvPath, `${csv}\n`, "utf8");
+    const args = ["-d", options.dicdir ?? DICDIR, "-u", out, "-f", "utf-8", "-t", "utf-8", csvPath];
+    const ok = await runMecab("", args, options.bin ?? process.env.MECAB_DICT_INDEX ?? "mecab-dict-index", DEFAULT_TIMEOUT_MS);
+    result = ok === null ? null : out;
+  } catch (e) {
+    warnUnavailable(String(e));
+  } finally {
+    await rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+  dictCache.set(hash, result);
+  return result;
 }

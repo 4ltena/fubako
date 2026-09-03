@@ -72,8 +72,9 @@
 | DB | PostgreSQL + Prisma |
 | 認証 | Auth.js v5（Discord OAuth ＋ メールのマジックリンク） |
 | タグ自動推定（Phase 5） | Anthropic API（サーバ側からのみ呼ぶ） |
-| ダイジェスト | Vercel Cron（1日1回） |
-| ホスティング | Vercel + Neon |
+| 形態素解析 | MeCab（ipadic-utf8。子プロセスで呼ぶ。無ければ機能が黙って止まる） |
+| ダイジェスト | Vercel Cron、または node-cron（`npm run cron`、21:00 JST） |
+| ホスティング | Vercel + Neon、または Docker（Render / Fly.io / VPS） |
 
 X API は使わない。相互フォローのグラフ取得に有料枠が必要になる可能性が高い。狭さは招待コードと人数上限で作る。
 
@@ -148,14 +149,28 @@ lib/
   timeline.ts                タイムライン組み立て。伏せた投稿の本文をここで落とす
   image.ts                   画像の再エンコードと blurhash
   storage.ts                 Blob かローカルディスク
+  presence.ts                今日この場に来た人がいるか。真偽値だけ
+  form.ts                    投稿の形（一文・一枚・一句）の自動判定
+  morph.ts                   MeCab の呼び出しとパース。サーバ側のみ
+  similar.ts                 近い投稿の突き合わせ。terms は外に出さない
 scripts/
   smoke.mjs                  起動中サーバに対する通しテスト
   seed.mjs                   開発用の仮データ（SMTP 無しで画面を触るためのセッション付き）
+  verify-mecab.mjs           コンテナ内で形態素解析が動くかだけを確かめる
+  backfill-terms.mjs         既存投稿に terms を後から入れる
+  cron.mjs                   Vercel 以外でダイジェストを回す
 prisma/
   schema.prisma
 ```
 
 `lib/veil.ts` と `lib/visibility.ts` は必ずユニットテストを書く。ここが壊れると製品の約束が壊れる。
+
+MeCab はローカルに無くてよい。無いときは `terms` が空になり「近いことを書いた人がいます」が出ないだけで、投稿も表示も通る。実際に動かすなら Docker を使う。
+
+```bash
+docker build -t fubako .
+docker run --rm fubako node scripts/verify-mecab.mjs   # 名詞と形容詞が返るか
+```
 
 ---
 

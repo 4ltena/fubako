@@ -1,42 +1,67 @@
 # ふばこ 現在地
 
-更新: 2026-09-02
+更新: 2026-09-03
 
 ## 状態
 
-企画書（`docs/superpowers/企画書.md`）の段階 1〜4 を一度に実装した。段階 5（Anthropic API によるタグ自動推定）は未着手。
+企画書（`docs/superpowers/企画書.md`）の段階 1〜4 を実装済み。段階 5（Anthropic API によるタグ自動推定）は未着手。
 
-- 実装済み: サークル（招待コード・定員30）、投稿（寿命既定7日・短縮のみ）、タイムライン、地雷宣言と伏せ（サーバ側で本文を落とす）、未タグは未確認で伏せる、反応1種（数は出さない）、アーカイブ（本人には期限切れも残る）、日次ダイジェスト（`/api/cron/digest`、Vercel Cron 12:00 UTC = 21:00 JST）、robots/noindex/OGP 無し、PWA manifest
+- 実装済み: サークル（招待コード・定員30）、投稿（寿命既定7日・短縮のみ）、タイムライン、地雷宣言と伏せ（サーバ側で本文を落とす）、未タグは未確認で伏せる、反応1種（数は出さない）、アーカイブ（本人には期限切れも残る）、日次ダイジェスト、robots/noindex/OGP 無し、PWA manifest
 - 画像添付（最大4枚、EXIF 除去、blurhash、Vercel Blob private）と注意文（CW）を実装
+- **今日の気配**: `Membership.lastSeenAt` をタイムライン表示時に1時間に1回だけ更新し、「自分以外に JST で今日来た人がいるか」だけを1行出す。人数・名前・時刻は API にも画面にも出さない。`lastSeenAt` は本人にも見せない（`lib/presence.ts`）
+- **投稿の形**: `Post.form`（一文 / 一枚 / 一句 / 通常）を本文と画像から自動判定（`lib/form.ts`）。投稿フォームの入力項目は増やしていない。伏せた投稿には `form` を渡さない。表示分岐は `components/PostCard.tsx` の `PostBody` に閉じ、タイムラインもアーカイブも同じものを使う
+- **近いことを書いた人がいます**: MeCab で `Post.terms` を作り（`lib/morph.ts` / `lib/similar.ts`）、同じサークル内の近い投稿1件へ案内する行を出す。人の一覧・類似度・推定した話題は出さない。`terms` は API に出さない
 - 認証: Auth.js v5、Discord（`AUTH_DISCORD_ID` が無ければボタン非表示）＋メールのマジックリンク（nodemailer）
 - DB: Prisma 7 + `@prisma/adapter-pg`。ローカルは `npm run db:dev`（`prisma dev`、Docker 不要）
+- ホスティング: Vercel に加えて `Dockerfile` を用意（MeCab はネイティブバイナリと辞書が要るため）。Vercel 以外では `npm run cron`（node-cron、21:00 JST）がダイジェストを叩く
+
+## MeCab の扱い
+
+- **呼び出しは子プロセス**（`spawn("mecab")`）。バインディング（mecab-async 等）は Node のバージョン更新でネイティブビルドが壊れ `npm ci` ごと落ちるほうが高くつくため採らない。子プロセスならイメージに `mecab` があれば動き、無ければ静かに無効になる
+- 出力書式は `-F` / `-U` / `-E` で固定する。`-Ochasen` は mecabrc 側の定義に依存するため使わない。パースは `lib/morph.test.ts` が4列固定の出力見本で守る
+- 辞書は **ipadic-utf8**（`mecab-ipadic-utf8`）。`mecab-ipadic-NEologd` は apt に無く、ビルドに数百MBと長時間が要りイメージが太るため既定にしていない（`MECAB_DICDIR` を差し替えれば使える）。代わりに、そのサークルで使われたタグを `userDictFrom(tags)` でユーザー辞書にして固有名詞として拾う
+- **MeCab が無い環境では機能3が黙って無効になる**。`tokenize` は例外を投げず空配列を返し、`terms` が空のまま投稿は通る。近い投稿の行が出ないだけ
 
 ## 検証
 
-- `npm test` 23件 pass（veil / visibility / image。画像はピクセル上限 4000万と実フォーマット検証を含む）
+- `npm test` 64件 pass（veil / visibility / image / presence / form / morph / similar）
 - `npm run typecheck`・`npm run lint` エラー無し
 - `npm run build` 成功
-- `npm run smoke` 35項目 ALL OK（本番ビルドを `next start` して API を通しで確認。画像つき投稿の作成・伏せ・reveal・`/api/images/:id` の代理取得と `X-Robots-Tag: noindex`・非会員/期限切れの遮断・4MB 超の 413 を追加）
-- りん視点のタイムライン HTML を curl で取得し、注意文つき投稿は理由だけが出て本文も `/api/images/` も含まれず、blurhash 文字列だけが載ることを確認。reveal 後の画像は WebP 1200×800 で EXIF 無し
-- 未実施: ブラウザでの目視（拡張が未接続）。`npm run dev` と `npm run seed` のリンクで確認できる
-- `npm run seed` で仮ユーザー5人（*@example.test）とサークル・投稿（注意文つき1件を含む）・地雷宣言を投入し、りん視点で「ネタバレ」「愚痴」が伏せられ期限切れが消えることを API で確認
-- 未検証: マジックリンクのメール送信、Discord OAuth、ダイジェストの実送信（ローカルに SMTP が無い）
+- `npm run smoke` 48項目 ALL OK（本番ビルドを `next start` して API と画面 HTML を通しで確認）
+  - 気配: 自分しか来ていない日は出ない／他人が来た日は「今日、この場に来た人がいます」の1行だけが出て名前も数字も混ざらない／`lastSeenAt` は API に出ない
+  - 形: 本文から `sentence` / `verse` / `text` が決まる／伏せた投稿は `form` を持たない
+  - 近い投稿: `terms` は API に出ない／案内は投稿 ID だけ／自分の投稿には出ない／伏せた投稿には付かない／案内先が消えたら出ない／画面にも1行だけ出て飛び先が同じページにある
+- `npm run seed` を流し、りん視点のタイムライン HTML に「今日、この場に来た人がいます」「近いことを書いた人がいます」、一文（`text-lg`）と一句（中央揃え）の表示が出ることを確認
+- **未検証**: コンテナ内での MeCab の実挙動。この開発機には Docker も WSL のディストロも無く、`docker build` を実行できていない。イメージサイズも実測できていない（`node:24-bookworm-slim` + mecab 一式 + 本番依存で 500MB〜700MB 程度の見込み、根拠は無い）。コンテナが用意でき次第 `docker run --rm fubako node scripts/verify-mecab.mjs` で「`tokenize("推しの新曲が良かった")` が名詞と形容詞を返す」ことを確認する
+- **確認済み**: MeCab 不在時に機能3が黙って無効になること。この開発機に `mecab` が無い状態で `tokenize` が `{"event":"mecab_unavailable"}` を1度だけ記録して空配列を返し、投稿は通り、`scripts/backfill-terms.mjs` は何もせず終了した（空の `terms` で上書きしない）
+- 未検証: マジックリンクのメール送信、Discord OAuth、ダイジェストの実送信（ローカルに SMTP が無い）。`scripts/cron.mjs --once` は `/api/cron/digest` に到達して 500（SMTP 無し）を受けるところまで確認
+- 未実施: ブラウザでの目視。`npm run dev` と `npm run seed` のリンクで確認できる
+
+## 未決
+
+- **一文／一句の文字数閾値**（暫定）。一文40文字・一句は3行かつ各行10文字。根拠は無い。`lib/form.ts` の定数
+- **類似の一致閾値**（暫定）。重い語＝`terms` の先頭3語、一般語は2語一致で成立。`lib/similar.ts` の定数。`terms` は文字列の並びだけを保存するため「固有名詞かどうか」は突き合わせ時には分からない。固有名詞を先頭に置く重み付け（`rankTerms`）で代用している。品詞を保存すべきかは未決
+- **`lastSeenAt` の更新間隔**（暫定1時間）。`lib/presence.ts` の `SEEN_INTERVAL_MS`
+- **本文が空で画像だけの投稿を許すか**。`POST /api/posts` は本文が空だと 400 を返すので、形の `picture`（画像1枚以上かつ本文が空）は現状発生しない。判定と表示は実装済みで、投稿側の必須条件を緩めるかは製品判断なので手を付けていない
+- **受け取ったデザインの適用範囲**。`カードの寿命デザイン案.zip` と `ふばこのデザイン企画.zip` を確認したが、どちらも機能1〜3の表示（気配の行・形の出し分け・近い投稿の行）を含んでいない。前者は「寿命を紙のいたみで見せる」別案、後者は既存画面（タイムライン・投げる・地雷宣言・招待・状態見本・PC）の全面刷新で、別のデザインシステム（Noto Serif JP / Zen Kaku Gothic、生成り色 #efe4d2、角丸26〜44px、独自の色変数）を使う。機能1〜3だけをそこへ寄せると画面が二重の様式になるため、今回は既存の `globals.css` のトークンのみで組んだ。全面刷新を別作業として起こすかは未決
+- **デザイン案の「12人」表記**。刷新案のタイムライン上部にサークルの人数が入っている。README の「数えない」に当たるため実装していない。意図的な方針変更かどうかの確認が要る
+- 人数上限・寿命既定値・名前（README の未決事項）
 
 ## 次の作業
 
-1. Vercel + Neon に置いて、実 SMTP と Discord で認証を通す
-2. 段階 0 のヒアリング結果を待って、段階 5（タグ自動推定）へ進むか決める
-3. 未決: 人数上限・寿命既定値・名前（README の未決事項）
+1. コンテナで `npm run verify:mecab` を通し、イメージサイズを実測する
+2. Vercel + Neon（または Docker を置ける先）に載せ、実 SMTP と Discord で認証を通す
+3. デザイン刷新を別作業として起こすか決める（上の未決）
 
 ## 阻害要因
 
-無し。
+この開発機に Docker が無く、MeCab を実際に走らせた確認ができていない。ロジック側は MeCab 不在の経路をテストで固定してあるので、機能1〜3の実装自体は止まっていない。
 
 ## ブランチ
 
-`feat/images-cw`（main の `85307b3` から）。実装は Workflow（Sonnet）でタスクごとにレビュー済み、最終レビュー 3 視点と修正波、背景セキュリティレビューの 2 件も反映済み。main への統合は未実施。
+`feat/presence-forms-similar`（`feat/images-cw` の `460daf9` から）。`feat/images-cw` も main へ未統合。
 
 ## レビュー裁定
 
-- 第 1 周（Codex、2026-09-02）の指摘 R1-01〜03（タグ候補と日次ダイジェストから期限切れ投稿を除く、`CRON_SECRET` 未設定時の拒否）はすべて採用し、本文へ反映済み。
+- 第 1 周（Codex、2026-09-02）の指摘 R1-01〜03 はすべて採用し、本文へ反映済み。
 - 第 2 周（Codex、2026-09-02）の指摘 R2-01〜03 は全て採用し、本文へ反映した。却下した指摘は無い。
