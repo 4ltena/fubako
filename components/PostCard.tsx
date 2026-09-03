@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Blurhash } from "@/components/Blurhash";
 import type { Form } from "@/lib/form";
 import type { TimelinePost } from "@/lib/timeline";
-import type { Wear } from "@/lib/wear";
+import { isFolded, marksOf, paperTexture } from "@/lib/wear";
 
 export function ImageGrid({ ids }: { ids: string[] }) {
   if (ids.length === 0) return null;
@@ -23,39 +23,19 @@ export function ImageGrid({ ids }: { ids: string[] }) {
 
 /**
  * 紙のいたみ。数字を出さずに寿命の残りを見せる（lib/wear.ts）。
- * しわ・雨の跡・角の折れ・インクの薄れを重ねるだけで、内容には触らない。
+ * しわ・シミ・角の折れの位置は投稿ごとに決まっていて、いつ見ても同じ。
  */
-function Wearing({ level }: { level: Wear }) {
-  if (level === 0) return null;
-  // しわは線ではなく、光のあたり方の差として置く。近づかないと見えない濃さにする。
-  const crease = 0.010 + level * 0.006;
-  const rain = level >= 2 ? 0.028 + level * 0.008 : 0;
+function Wearing({ id, wear }: { id: string; wear: number }) {
+  if (wear <= 0) return null;
   return (
     <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[26px]">
-      <div
-        className="absolute inset-0"
-        style={{
-          backgroundImage: [
-            `linear-gradient(101deg, transparent 30%, rgba(32,30,29,${crease}) 44%, transparent 58%)`,
-            `linear-gradient(74deg, transparent 52%, rgba(32,30,29,${crease * 0.8}) 68%, transparent 82%)`,
-          ].join(","),
-        }}
-      />
-      {rain > 0 && (
+      <div className="absolute inset-0" style={{ backgroundImage: paperTexture(id, wear) }} />
+      {isFolded(wear) && (
         <div
-          className="absolute inset-0"
+          className={`absolute top-0 h-7 w-7 ${marksOf(id).foldRight ? "right-0" : "left-0"}`}
           style={{
-            backgroundImage: [
-              `radial-gradient(70px 52px at 84% 80%, rgba(100,92,80,${rain}) 0%, transparent 72%)`,
-              `radial-gradient(44px 34px at 20% 64%, rgba(100,92,80,${rain * 0.7}) 0%, transparent 72%)`,
-            ].join(","),
+            background: `linear-gradient(${marksOf(id).foldRight ? 225 : 135}deg, var(--color-paper) 48%, rgba(32,30,29,0.07) 50%, transparent 60%)`,
           }}
-        />
-      )}
-      {level >= 3 && (
-        <div
-          className="absolute right-0 top-0 h-7 w-7"
-          style={{ background: "linear-gradient(225deg, var(--color-paper) 48%, rgba(32,30,29,0.07) 50%, transparent 60%)" }}
         />
       )}
     </div>
@@ -95,7 +75,7 @@ function Meta({ name, at }: { name: string; at: string }) {
   );
 }
 
-export function PostCard({ post, wear = 0 }: { post: TimelinePost; wear?: Wear }) {
+export function PostCard({ post, wear = 0 }: { post: TimelinePost; wear?: number }) {
   const [opened, setOpened] = useState<{ body: string; imageIds: string[] } | null>(post.veiled ? null : { body: post.body, imageIds: post.imageIds });
   // 伏せた投稿は form を持たない。開いたあとも形は使わず通常表示にする。
   const form: Form = post.veiled ? "text" : post.form;
@@ -134,7 +114,7 @@ export function PostCard({ post, wear = 0 }: { post: TimelinePost; wear?: Wear }
   if (opened === null) {
     return (
       <article id={`post-${post.id}`} className="relative overflow-hidden rounded-[26px] bg-veil px-[22px] pb-4 pt-5">
-        <Wearing level={wear} />
+        <Wearing id={post.id} wear={wear} />
         <div className="relative">
           <Meta name={post.authorName} at={post.createdAt} />
           {/* 紙全体がタップ領域。右下の「ひらく」は目安 */}
@@ -161,7 +141,7 @@ export function PostCard({ post, wear = 0 }: { post: TimelinePost; wear?: Wear }
 
   return (
     <article id={`post-${post.id}`} className="relative overflow-hidden rounded-[26px] bg-card px-[22px] pb-4 pt-5 shadow-paper">
-      <Wearing level={wear} />
+      <Wearing id={post.id} wear={wear} />
       <div className="relative">
         <Meta name={post.authorName} at={post.createdAt} />
         <PostBody form={form} body={opened.body} imageIds={opened.imageIds} />

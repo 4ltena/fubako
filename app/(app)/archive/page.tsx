@@ -3,28 +3,15 @@ import { PostBody } from "@/components/PostCard";
 import { currentUserId } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import type { Form } from "@/lib/form";
-import { wearOf, WEAR_STEPS } from "@/lib/wear";
+import { isFolded, marksOf, paperTexture, wearOf } from "@/lib/wear";
 
 function isExpired(d: Date) {
   return d.getTime() <= Date.now();
 }
 
-/** もどってきた紙はいたんだまま重なって残る。角度もいたみ方も一枚ずつ違う。 */
+/** もどってきた紙はいたんだまま重なって残る。角度もいたみ方も一枚ずつ違う（lib/wear.ts）。 */
 function paperStyle(id: string, wear: number) {
-  const seed = id.charCodeAt(0) + id.charCodeAt(id.length - 1);
-  const tilt = ((seed % 5) - 2) * 0.35;
-  const crease = 0.010 + wear * 0.006;
-  const rain = wear >= 2 ? 0.028 + wear * 0.008 : 0;
-  return {
-    transform: `rotate(${tilt}deg)`,
-    backgroundImage: [
-      `linear-gradient(${97 + (seed % 12)}deg, transparent 30%, rgba(32,30,29,${crease}) 44%, transparent 58%)`,
-      `linear-gradient(${71 + (seed % 9)}deg, transparent 52%, rgba(32,30,29,${crease * 0.8}) 68%, transparent 82%)`,
-      rain > 0 ? `radial-gradient(70px 52px at ${70 + (seed % 20)}% 78%, rgba(100,92,80,${rain}) 0%, transparent 72%)` : "",
-    ]
-      .filter(Boolean)
-      .join(","),
-  };
+  return { transform: `rotate(${marksOf(id).tilt.toFixed(2)}deg)`, backgroundImage: paperTexture(id, wear) };
 }
 
 export default async function ArchivePage() {
@@ -43,14 +30,22 @@ export default async function ArchivePage() {
       </header>
       <ul className="mt-6 space-y-3">
         {posts.map((p) => {
+          // もどってきた紙は、引き取った時点のいたみのまま止まる（wearOf が expiresAt で止める）
           const wear = wearOf(p.createdAt, p.expiresAt, now);
           const back = isExpired(p.expiresAt);
           return (
             <li
               key={p.id}
-              style={paperStyle(p.id, back ? WEAR_STEPS : wear)}
-              className={`rounded-[26px] px-[22px] pb-4 pt-5 ${back ? "bg-veil" : "bg-card shadow-paper"}`}
+              style={paperStyle(p.id, wear)}
+              className={`relative overflow-hidden rounded-[26px] px-[22px] pb-4 pt-5 ${back ? "bg-veil" : "bg-card shadow-paper"}`}
             >
+              {isFolded(wear) && (
+                <div
+                  aria-hidden
+                  className={`pointer-events-none absolute top-0 h-7 w-7 ${marksOf(p.id).foldRight ? "right-0" : "left-0"}`}
+                  style={{ background: `linear-gradient(${marksOf(p.id).foldRight ? 225 : 135}deg, var(--color-paper) 48%, rgba(32,30,29,0.07) 50%, transparent 60%)` }}
+                />
+              )}
               <div className="label flex items-baseline gap-3 text-[11px] tracking-[0.12em] text-ink-soft">
                 <span className="text-ink">{p.circle.name}</span>
                 <span>{p.createdAt.toLocaleDateString("ja-JP")}</span>
