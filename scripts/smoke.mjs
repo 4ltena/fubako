@@ -106,6 +106,27 @@ const formById = Object.fromEntries(tl.map((p) => [p.id, p]));
 assert(formById[f1.id].form === "sentence" && formById[f2.id].form === "verse" && formById[f3.id].form === "text", "形が本文から自動で決まる");
 assert(formById[fv.id].veiled && !("form" in formById[fv.id]), "伏せた投稿は形を持たない");
 
+// 近いことを書いた人がいます（terms は MeCab 依存なので DB に直接入れて突き合わせだけを見る）
+const setTerms = (id, terms) => db.query('UPDATE "Post" SET terms=$1 WHERE id=$2', [terms, id]);
+const sX = await mk("ホロライブの配信の話", "推し");
+const sZ = await mk("ホロライブの配信のネタバレ", "ネタバレ");
+const sY = await (await B("/api/posts", { method: "POST", body: JSON.stringify({ circleId: circle.id, body: "ホロライブのグッズの話", tags: "推し" }) })).json();
+await setTerms(sX.id, ["ホロライブ", "配信"]);
+await setTerms(sZ.id, ["ホロライブ", "配信"]);
+await setTerms(sY.id, ["ホロライブ", "グッズ"]);
+tl = (await (await B("/api/posts?circleId=" + circle.id)).json()).posts;
+const simById = Object.fromEntries(tl.map((p) => [p.id, p]));
+assert(!JSON.stringify(tl).includes("terms"), "terms は API に出ない");
+assert(simById[sX.id].similar?.postId === sY.id, "近い投稿へ1件だけ案内する");
+assert(!("similar" in simById[sY.id]), "自分の投稿には出さない");
+assert(simById[sZ.id].veiled && !("similar" in simById[sZ.id]), "伏せた投稿には similar が付かない");
+assert(!JSON.stringify(simById[sX.id].similar).includes(circle.id) && Object.keys(simById[sX.id].similar).length === 1, "案内は投稿 ID だけで名前も本文も持たない");
+const simPage = await (await B("/c/" + circle.id)).text();
+assert(simPage.includes("近いことを書いた人がいます") && simPage.includes(`post-${sY.id}`), "画面にも案内が1行だけ出て、飛び先が同じページにある");
+assert((await B(`/api/posts/${sY.id}`, { method: "DELETE" })).ok, "案内先を消す");
+tl = (await (await B("/api/posts?circleId=" + circle.id)).json()).posts;
+assert(!("similar" in tl.find((p) => p.id === sX.id)), "伏せられる投稿しか残らなければ案内を出さない");
+
 assert((await fetch(BASE + "/api/cron/digest")).status === 401, "cron は秘密なしで 401");
 const page = await (await B("/c/" + circle.id)).text();
 assert(page.includes("noindex") && !page.includes("og:") && !page.includes("ネタバレ本文") && !page.includes("タグなし本文") && page.includes("無害本文"), "画面 HTML にも伏せた本文が無く noindex");

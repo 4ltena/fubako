@@ -45,6 +45,8 @@ export function PostCard({ post }: { post: TimelinePost }) {
   const [opened, setOpened] = useState<{ body: string; imageIds: string[] } | null>(post.veiled ? null : { body: post.body, imageIds: post.imageIds });
   // 伏せた投稿は form を持たない。開いたあとも形は使わず通常表示にする。
   const form: Form = post.veiled ? "text" : post.form;
+  // 相手の投稿者名も本文も出さない。飛び先の id だけ持つ。
+  const similarId = post.veiled ? null : (post.similar?.postId ?? null);
   const [reacted, setReacted] = useState(post.reacted);
   const [loading, setLoading] = useState(false);
 
@@ -61,7 +63,7 @@ export function PostCard({ post }: { post: TimelinePost }) {
   }
 
   return (
-    <article className="rounded border border-line bg-card p-3 text-sm">
+    <article id={`post-${post.id}`} className="rounded border border-line bg-card p-3 text-sm">
       <div className="flex gap-2 text-xs text-ink-soft">
         <span>{post.authorName}</span>
         <time dateTime={post.createdAt}>{new Date(post.createdAt).toLocaleString("ja-JP")}</time>
@@ -77,6 +79,15 @@ export function PostCard({ post }: { post: TimelinePost }) {
         </button>
       ) : (
         <PostBody form={form} body={opened.body} imageIds={opened.imageIds} />
+      )}
+      {similarId && (
+        <button
+          type="button"
+          onClick={() => document.getElementById(`post-${similarId}`)?.scrollIntoView({ behavior: "smooth", block: "center" })}
+          className="mt-2 block text-xs text-ink-soft underline"
+        >
+          近いことを書いた人がいます
+        </button>
       )}
       <div className="mt-2 flex items-center gap-2 text-xs text-ink-soft">
         {post.tags.map((t) => <span key={t}>#{t}</span>)}
