@@ -76,7 +76,17 @@ function Meta({ name, at }: { name: string; at: string }) {
   );
 }
 
-export function PostCard({ post, wear = 0, preopened = null }: { post: TimelinePost; wear?: number; preopened?: { body: string; imageIds: string[] } | null }) {
+export function PostCard({
+  post,
+  wear = 0,
+  preopened = null,
+  onVeiled,
+}: {
+  post: TimelinePost;
+  wear?: number;
+  preopened?: { body: string; imageIds: string[] } | null;
+  onVeiled?: (postId: string) => void;
+}) {
   // 開いた本文はサーバから取り直したものだけを持つ。表示は毎回 props から導く。
   // （state を初期値だけで持つと、伏せ直したあとサーバが伏せて返しても紙が開いたまま残る）
   const [revealed, setRevealed] = useState<{ body: string; imageIds: string[] } | null>(null);
@@ -84,7 +94,9 @@ export function PostCard({ post, wear = 0, preopened = null }: { post: TimelineP
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   // preopened は一覧側で「未確認も開いて見る」を押したときに渡ってくる本文。
-  const opened = post.veiled ? (revealed ?? preopened) : { body: post.body, imageIds: post.imageIds };
+  // 自分で伏せた紙にはどちらも使わない（伏せたのに開いたまま残らないように）。
+  const selfVeiled = post.veiled && post.kind === "self";
+  const opened = post.veiled ? (selfVeiled ? null : (revealed ?? preopened)) : { body: post.body, imageIds: post.imageIds };
   // 伏せた投稿は form を持たない。開いたあとも形は使わず通常表示にする。
   const form: Form = post.veiled ? "text" : post.form;
   // 相手の投稿者名も本文も出さない。飛び先の id だけ持つ。
@@ -119,6 +131,8 @@ export function PostCard({ post, wear = 0, preopened = null }: { post: TimelineP
     const r = await fetch(`/api/posts/${post.id}/veil`, { method: "POST" });
     if (r.ok) {
       setRevealed(null);
+      // 一覧側が持っている本文も落としてもらう
+      onVeiled?.(post.id);
       router.refresh();
     }
     setLoading(false);

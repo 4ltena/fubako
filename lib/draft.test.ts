@@ -24,12 +24,14 @@ describe("下書き", () => {
     expect(loadDraft("c1", s, NOW)).toBe("書きかけの本文");
   });
 
-  it("サークルごとに分かれる", () => {
+  it("人ごと・箱ごとに分かれる（同じ端末を別の人が使っても混ざらない）", () => {
     const s = fakeStore();
-    saveDraft("c1", "こっち", s, NOW);
-    saveDraft("c2", "あっち", s, NOW);
-    expect(loadDraft("c1", s, NOW)).toBe("こっち");
-    expect(loadDraft("c2", s, NOW)).toBe("あっち");
+    saveDraft("u1:c1", "こっち", s, NOW);
+    saveDraft("u1:c2", "あっち", s, NOW);
+    saveDraft("u2:c1", "べつの人", s, NOW);
+    expect(loadDraft("u1:c1", s, NOW)).toBe("こっち");
+    expect(loadDraft("u1:c2", s, NOW)).toBe("あっち");
+    expect(loadDraft("u2:c1", s, NOW)).toBe("べつの人");
   });
 
   it("24時間を過ぎたら返さず、その場で捨てる", () => {

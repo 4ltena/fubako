@@ -9,6 +9,38 @@ import { prisma } from "@/lib/db";
  * 反応の知らせは投稿ごとに印（reactionNotifiedAt）を残し、同じ反応で二度言わない。
  * 印より新しい反応が付いたときだけ、もう一度だけ知らせる。
  */
+
+/** その人に届ける材料。件数は数えず、あるか無いかだけを引く。 */
+async function digestFor(userId: string, since: Date, now: Date) {
+  return prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      email: true,
+      memberships: {
+        select: {
+          circle: {
+            select: {
+              name: true,
+              // 自分以外の新しい紙が1枚でもあるか
+              posts: {
+                where: { createdAt: { gt: since }, deletedAt: null, expiresAt: { gt: now }, NOT: { authorId: userId } },
+                select: { id: true },
+                take: 1,
+              },
+            },
+          },
+        },
+      },
+      // 反応が付いた自分の紙。印より新しい反応だけを見る
+      posts: {
+        where: { deletedAt: null, reactions: { some: {} } },
+        select: { id: true, reactionNotifiedAt: true, reactions: { orderBy: { createdAt: "desc" }, take: 1, select: { createdAt: true } } },
+      },
+    },
+  });
+}
+
 export async function GET(req: Request) {
   const secret = process.env.CRON_SECRET;
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) {
@@ -16,30 +48,14 @@ export async function GET(req: Request) {
   }
   const now = new Date();
   const since = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-  const users = await prisma.user.findMany({
-    where: { email: { not: null } },
-    select: {
-      id: true,
-      email: true,
-      memberships: {
-        select: {
-          circle: {
-            select: { id: true, name: true, posts: { where: { createdAt: { gt: since }, deletedAt: null, expiresAt: { gt: now } }, select: { authorId: true }, take: 20 } },
-          },
-        },
-      },
-      posts: {
-        where: { deletedAt: null, reactions: { some: {} } },
-        select: { id: true, reactionNotifiedAt: true, reactions: { orderBy: { createdAt: "desc" }, take: 1, select: { createdAt: true } } },
-      },
-    },
-  });
+  const ids = await prisma.user.findMany({ where: { email: { not: null } }, select: { id: true } });
 
   const transport = nodemailer.createTransport(process.env.EMAIL_SERVER);
   let sent = 0;
-  for (const u of users) {
-    const circles = u.memberships.map((m) => m.circle).filter((c) => c.posts.some((p) => p.authorId !== u.id));
-    // まだ知らせていない反応がある投稿。印より新しいものだけを見る
+  for (const { id } of ids) {
+    const u = await digestFor(id, since, now);
+    if (!u?.email) continue;
+    const circles = u.memberships.map((m) => m.circle).filter((c) => c.posts.length > 0);
     const unseen = u.posts.filter((p) => {
       const latest = p.reactions[0]?.createdAt;
       if (!latest) return false;
@@ -51,7 +67,7 @@ export async function GET(req: Request) {
     if (lines.length === 0) continue;
     try {
       await transport.sendMail({
-        to: u.email!,
+        to: u.email,
         from: process.env.EMAIL_FROM,
         subject: "ふばこ 今日のダイジェスト",
         text: [...lines, "", process.env.APP_URL ?? "", "", "――", "ふばこ"].join("\n"),
@@ -63,7 +79,7 @@ export async function GET(req: Request) {
       sent++;
     } catch (e) {
       // 1人送れなくても、残りの人の便りは止めない
-      console.error(JSON.stringify({ event: "digest_failed", userId: u.id, error: String(e) }));
+      console.error(JSON.stringify({ event: "digest_failed", userId: id, error: String(e) }));
     }
   }
   return NextResponse.json({ sent });

@@ -19,7 +19,7 @@ async function shrink(file: File): Promise<Blob> {
   return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob"))), "image/jpeg", 0.85));
 }
 
-export function NewPostForm({ circleId, suggested }: { circleId: string; suggested: string[] }) {
+export function NewPostForm({ circleId, suggested, draftKey }: { circleId: string; suggested: string[]; draftKey: string }) {
   const router = useRouter();
   const [images, setImages] = useState<{ blob: Blob; url: string }[]>([]);
   const [busy, setBusy] = useState(false);
@@ -32,18 +32,20 @@ export function NewPostForm({ circleId, suggested }: { circleId: string; suggest
   // 書きかけを端末から戻す。DOM に直接入れるので、state もハイドレーションも動かさない。
   useEffect(() => {
     const el = bodyRef.current;
-    if (el && el.value === "") el.value = loadDraft(circleId, browserStore(), Date.now());
-  }, [circleId]);
+    if (el && el.value === "") el.value = loadDraft(draftKey, browserStore(), Date.now());
+  }, [draftKey]);
 
   /** 打つたびに残す（少し待ってから）。件数も「下書きがあります」も出さない。 */
   function keep(body: string) {
     if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => saveDraft(circleId, body, browserStore(), Date.now()), 600);
+    timer.current = setTimeout(() => saveDraft(draftKey, body, browserStore(), Date.now()), 600);
   }
 
   function discard() {
+    // 予約中の自動保存を先に止める。止めないと捨てた本文が書き戻る
+    if (timer.current) clearTimeout(timer.current);
     if (bodyRef.current) bodyRef.current.value = "";
-    clearDraft(circleId, browserStore());
+    clearDraft(draftKey, browserStore());
   }
 
   async function pick(files: FileList | null) {
@@ -73,7 +75,7 @@ export function NewPostForm({ circleId, suggested }: { circleId: string; suggest
     if (r.ok) {
       // 投げ終わった本文を端末に残さない
       if (timer.current) clearTimeout(timer.current);
-      clearDraft(circleId, browserStore());
+      clearDraft(draftKey, browserStore());
       router.push(`/c/${circleId}`);
       router.refresh();
       return;

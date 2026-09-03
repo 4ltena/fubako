@@ -29,6 +29,15 @@ export function PostList({ posts, wears }: { posts: TimelinePost[]; wears: Recor
     setBusy(false);
   }
 
+  /** 伏せ直した紙は、まとめて開いたときの本文も捨てる。 */
+  function forget(postId: string) {
+    setOpened((prev) => {
+      const next = { ...prev };
+      delete next[postId];
+      return next;
+    });
+  }
+
   return (
     <>
       {unconfirmed.length > 0 && (
@@ -41,7 +50,7 @@ export function PostList({ posts, wears }: { posts: TimelinePost[]; wears: Recor
         </button>
       )}
       {posts.map((p) => (
-        <PostCard key={p.id} post={p} wear={wears[p.id] ?? 0} preopened={opened[p.id] ?? null} />
+        <PostCard key={p.id} post={p} wear={wears[p.id] ?? 0} preopened={opened[p.id] ?? null} onVeiled={forget} />
       ))}
     </>
   );

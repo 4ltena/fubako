@@ -183,6 +183,24 @@ assert((await E("/api/circles/leave", { method: "POST", body: JSON.stringify({ c
 assert((await E("/api/posts?circleId=" + circle.id)).status === 404, "出たら箱は見えなくなる");
 assert((await E("/api/circles/join", { method: "POST", body: JSON.stringify({ inviteCode: circle.inviteCode }) })).ok, "同じ言葉でまた入れる");
 
+// 箱を出たあとも、自分が書いた紙の画像は自分に返る
+const withImg = new FormData();
+withImg.set("circleId", circle.id);
+withImg.set("body", "出たあとに残る写真");
+withImg.append("images", new Blob([png], { type: "image/png" }), "keep.png");
+const F = await sessionFor("f@example.test", "F");
+assert((await F("/api/circles/join", { method: "POST", body: JSON.stringify({ inviteCode: circle.inviteCode }) })).ok, "F が入る");
+const fPost = await (await F("/api/posts", { method: "POST", body: withImg, headers: { "content-type": undefined } })).json();
+const fImg = (await (await F(`/api/posts/${fPost.id}/reveal`)).json()).imageIds[0];
+assert((await F(`/api/images/${fImg}`)).ok, "出る前は自分の画像が取れる");
+assert((await F("/api/circles/leave", { method: "POST", body: JSON.stringify({ circleId: circle.id, word: circle.inviteCode }) })).ok, "F が出る");
+assert((await F(`/api/images/${fImg}`)).ok, "出たあとも、自分が書いた紙の画像は自分に取れる");
+assert((await C(`/api/images/${fImg}`)).status === 404, "非会員は相変わらず取れない");
+
+// 外に飛ばすリダイレクトを受け付けない
+const evil = await B("/api/circles/join", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: "inviteCode=あいうえおかきくけこ&from=//example.com" });
+assert(evil.status === 303 && new URL(evil.headers.get("location"), BASE).origin === BASE, "外部への戻り先は受け付けない");
+
 assert((await fetch(BASE + "/api/cron/digest")).status === 401, "cron は秘密なしで 401");
 const page = await (await B("/c/" + circle.id)).text();
 assert(page.includes("noindex") && !page.includes("og:") && !page.includes("ネタバレ本文") && !page.includes("タグなし本文") && page.includes("無害本文"), "画面 HTML にも伏せた本文が無く noindex");

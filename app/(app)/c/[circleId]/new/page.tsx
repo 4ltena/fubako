@@ -22,7 +22,8 @@ export default async function NewPostPage({ params }: { params: Promise<{ circle
         <span className="text-[15px] tracking-[0.14em]">{circle.name}へ</span>
         <span className="label invisible text-xs">とじる</span>
       </div>
-      <NewPostForm circleId={circleId} suggested={suggested} />
+      {/* 書きかけの鍵は人ごとに分ける。同じ端末を別の人が使っても混ざらない */}
+      <NewPostForm circleId={circleId} suggested={suggested} draftKey={`${userId}:${circleId}`} />
     </div>
   );
 }

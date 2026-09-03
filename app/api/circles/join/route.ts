@@ -9,8 +9,9 @@ export async function POST(req: Request) {
   const b = await readBody(req);
   // 打ち間違い以外の揺れ（カタカナ・空白）だけを均す。大小は潰さない
   const inviteCode = normalizeInvite(b.inviteCode ?? "");
-  // form から来たときの戻り先。無ければサークル一覧
-  const from = (b.from ?? "/").startsWith("/") ? (b.from ?? "/") : "/";
+  // form から来たときの戻り先。外に飛ばされないよう、自分の中のパスだけを許す
+  const asked = b.from ?? "/";
+  const from = asked.startsWith("/") && !asked.startsWith("//") && !asked.startsWith("/\\") ? asked : "/";
   const circle = await prisma.circle.findUnique({
     where: { inviteCode },
     include: { _count: { select: { memberships: true } } },
