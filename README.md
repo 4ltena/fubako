@@ -72,7 +72,8 @@
 
 | 層 | 採用 |
 |---|---|
-| フロント / サーバ | Next.js (App Router) + TypeScript + Tailwind CSS |
+| フロント / サーバ | Next.js (App Router) + TypeScript + Tailwind CSS v4 |
+| 見た目 | 配布デザイン（Organic）。明暗は OS/ブラウザ追従で、切り替えは作らない |
 | DB | PostgreSQL + Prisma |
 | 認証 | Auth.js v5（Discord OAuth ＋ メールのマジックリンク） |
 | タグ自動推定（Phase 5） | Anthropic API（サーバ側からのみ呼ぶ） |
@@ -154,6 +155,7 @@ lib/
   image.ts                   画像の再エンコードと blurhash
   storage.ts                 Blob かローカルディスク
   presence.ts                今日この場に来た人がいるか。真偽値だけ
+  tags.ts                    そのサークルでよく使われた語（件数は返さない）
   invite.ts                  招待の言葉（ひらがな10文字）の生成と正規化
   draft.ts                   書きかけを端末に24時間だけ残す
   wear.ts                    紙のいたみ。寿命の残りを数字にしない
