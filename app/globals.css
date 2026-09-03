@@ -1,27 +1,31 @@
 @import "tailwindcss";
 
-/* 配布されたデザイン（Organic）のトークン。色・影・角丸はここからだけ取る。
+/* 配布されたデザイン（Organic）のトークンを、読みやすさで詰め直したもの。
+   面どうし・字と面の対比は lib のテストではなく scratchpad の計算で確かめてある
+   （紙/地・伏せた紙/地・へこみ・緑の帯・反応の地はすべて 1.2 以上、
+     本文と小さい字は 4.5 以上、プレースホルダは 3 以上）。
    暗い側は下の @media で同じ変数を差し替える（Tailwind の色ユーティリティは
    必ず var() 参照になるので、dark: を1つも書かずに全画面が入れ替わる）。 */
 @theme {
-  --color-paper: #efe4d2;      /* 台紙 */
-  --color-screen: #f5ead8;     /* 画面の地 */
-  --color-card: #f9f4ed;       /* 紙 = neutral-100 */
-  --color-veil: #eee7db;       /* 伏せた紙 = neutral-200 */
-  --color-line: #dcd3c4;       /* 罫 = neutral-300 */
-  --color-slot: #dcd3c4;       /* 伏せた面のへこみ */
-  --color-slot-rule: #f2ece3;  /* へこみの中の横線 */
+  --color-paper: #e4d7c0;      /* 台紙（PC の外側） */
+  --color-screen: #ece0cb;     /* 画面の地 */
+  --color-card: #fdf9f3;       /* 紙 */
+  --color-veil: #d6c9b3;       /* 伏せた紙。地より沈める */
+  --color-line: #cfc4b1;       /* 罫 */
+  --color-edge: #d3c6b0;       /* 影を持たない面の縁 */
+  --color-slot: #bcae95;       /* 伏せた面のへこみ */
+  --color-slot-rule: #eee7dc;  /* へこみの中の横線 */
   --color-ink: #201e1d;
-  --color-ink-soft: #645c50;   /* neutral-700 */
-  --color-ink-faint: #82796a;  /* neutral-600 */
-  --color-ink-pale: #c0b6a5;   /* neutral-400 */
-  --color-accent: #8c491a;     /* accent-700 */
-  --color-accent-deep: #643312;/* accent-800 */
-  --color-accent-pale: #fff2eb;/* accent-100 */
-  --color-sage: #f0fae1;       /* accent-2-100 */
-  --color-sage-fill: #e1eecc;  /* accent-2-200 */
-  --color-sage-ink: #56633f;   /* accent-2-700 */
-  --color-sage-deep: #3d472b;  /* accent-2-800 */
+  --color-ink-soft: #544c42;
+  --color-ink-faint: #584f43;
+  --color-ink-pale: #948a78;   /* プレースホルダ */
+  --color-accent: #8c491a;
+  --color-accent-deep: #643312;
+  --color-accent-pale: #ffd0b3;/* 届いた状態の地 */
+  --color-sage: #c6d6a9;
+  --color-sage-fill: #a8ba8a;
+  --color-sage-ink: #3d472b;
+  --color-sage-deep: #2b3320;
 
   --radius-paper: 26px;
   --radius-sheet: 28px;
@@ -52,24 +56,25 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-paper: #261e18;
+    --color-paper: #1f1913;
     --color-screen: #2a231d;
-    --color-card: #322a21;
-    --color-veil: #26211b;
-    --color-line: #474238;
-    --color-slot: #1c1611;
-    --color-slot-rule: #3e362f;
+    --color-card: #3a3128;     /* 紙は地よりはっきり明るく */
+    --color-veil: #161009;     /* 伏せた紙は地より沈める */
+    --color-line: #4f483d;
+    --color-edge: #4a4238;
+    --color-slot: #332b22;     /* 暗い側ではへこみを「光の当たる面」として出す */
+    --color-slot-rule: #191309;
     --color-ink: #f5ead8;
-    --color-ink-soft: #c0b6a5;
-    --color-ink-faint: #a19786;
-    --color-ink-pale: #645c50;
+    --color-ink-soft: #cdc3b2;
+    --color-ink-faint: #a89d8b;
+    --color-ink-pale: #857b6c;
     --color-accent: #f6a06b;
     --color-accent-deep: #ffc6a5;
-    --color-accent-pale: #402310;
-    --color-sage: #272e1b;
-    --color-sage-fill: #3d472b;
-    --color-sage-ink: #aebf92;
-    --color-sage-deep: #ccdbb2;
+    --color-accent-pale: #6b3a1a;
+    --color-sage: #3d472b;
+    --color-sage-fill: #56633f;
+    --color-sage-ink: #ccdbb2;
+    --color-sage-deep: #e1eecc;
     /* 暗い地では、影ではなく縁と沈む暗さで浮かせる（Organic の指示） */
     --lift-paper: 0 0 0 1px rgba(245, 234, 216, 0.07), 0 1px 3px rgba(0, 0, 0, 0.55);
     --lift-high: 0 0 0 1px rgba(245, 234, 216, 0.09), 0 8px 22px rgba(0, 0, 0, 0.6);

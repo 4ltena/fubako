@@ -189,7 +189,7 @@ export function PostCard({
       {menuOpen && (
         <>
           <button type="button" aria-hidden tabIndex={-1} onClick={() => setMenuOpen(false)} className="fixed inset-0 z-10 cursor-default" />
-          <span className="absolute right-0 top-9 z-20 block w-max rounded-[28px] bg-card p-2.5 text-sm tracking-[0.06em] shadow-lift">
+          <span className="absolute right-0 top-9 z-20 block w-max rounded-[28px] border border-edge bg-card p-2.5 text-sm tracking-[0.06em] shadow-lift">
             {post.mine ? (
               post.returned ? (
                 <span className="block w-max px-[18px] py-[15px] text-ink-faint">もう他の人からは見えません</span>
@@ -226,7 +226,7 @@ export function PostCard({
 
   if (opened === null) {
     return (
-      <article id={`post-${post.id}`} className="relative rounded-[26px] bg-veil px-[22px] pb-4 pt-5">
+      <article id={`post-${post.id}`} className="relative rounded-[26px] border border-edge bg-veil px-[22px] pb-4 pt-5">
         <Wearing id={post.id} wear={wear} />
         <div className="relative">
           <Meta name={post.authorName} at={post.createdAt} stamp={post.stamp} trailing={post.veiled && post.kind === "unconfirmed" ? undefined : menu} />
@@ -273,7 +273,7 @@ export function PostCard({
               type="button"
               onClick={veilForMe}
               disabled={loading}
-              className="label ml-auto shrink-0 rounded-full bg-veil px-4 py-[9px] text-[11px] tracking-[0.14em] text-ink-soft"
+              className="label ml-auto shrink-0 rounded-full border border-edge bg-veil px-4 py-[9px] text-[11px] tracking-[0.14em] text-ink-soft"
             >
               また伏せる
             </button>
@@ -286,7 +286,7 @@ export function PostCard({
         )}
         <div className="mt-3 flex items-center gap-2">
           {tags.map((t) => (
-            <span key={t} className="label rounded-full bg-sage px-3 py-[5px] text-[11px] tracking-[0.06em] text-sage-ink">{t}</span>
+            <span key={t} className="label rounded-full border border-sage-fill bg-sage px-3 py-[5px] text-[11px] tracking-[0.06em] text-sage-ink">{t}</span>
           ))}
           {!post.mine && (
             <>
@@ -294,7 +294,7 @@ export function PostCard({
                 onClick={react}
                 aria-pressed={reacted}
                 aria-label={reacted ? "届いた" : "届ける"}
-                className={`ml-auto flex size-[42px] shrink-0 items-center justify-center rounded-full text-[15px] ${reacted ? "bg-accent-pale text-accent" : "bg-veil text-ink-faint"}`}
+                className={`ml-auto flex size-[42px] shrink-0 items-center justify-center rounded-full border text-[15px] ${reacted ? "border-accent/40 bg-accent-pale text-accent" : "border-edge bg-veil text-ink-faint"}`}
               >
                 届
               </button>

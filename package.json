@@ -15,7 +15,8 @@
     "seed": "node scripts/seed.mjs",
     "cron": "node scripts/cron.mjs",
     "backfill:terms": "node scripts/backfill-terms.mjs",
-    "verify:mecab": "node scripts/verify-mecab.mjs"
+    "verify:mecab": "node scripts/verify-mecab.mjs",
+    "contrast": "node scripts/contrast.mjs"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",

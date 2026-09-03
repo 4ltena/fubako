@@ -38,7 +38,7 @@ export default async function TimelinePage({ params, searchParams }: { params: P
 
       <div className="mt-5 space-y-3">
         {presentToday && (
-          <p className="label rounded-full bg-sage px-5 py-3 text-[13px] tracking-[0.06em] text-sage-deep">今日、この場に来た人がいます</p>
+          <p className="label rounded-full border border-sage-fill bg-sage px-5 py-3 text-[13px] tracking-[0.06em] text-sage-deep">今日、この場に来た人がいます</p>
         )}
         {posts.length === 0 && (
           <div className="flex flex-col gap-[18px] rounded-[26px] bg-card px-6 pb-7 pt-[34px] shadow-paper">

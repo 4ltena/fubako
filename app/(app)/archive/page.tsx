@@ -37,7 +37,7 @@ export default async function ArchivePage() {
             <li
               key={p.id}
               style={paperStyle(p.id, wear)}
-              className={`relative overflow-hidden rounded-[26px] px-[22px] pb-4 pt-5 ${back ? "bg-veil" : "bg-card shadow-paper"}`}
+              className={`relative overflow-hidden rounded-[26px] px-[22px] pb-4 pt-5 ${back ? "border border-edge bg-veil" : "bg-card shadow-paper"}`}
             >
               {isFolded(wear) && (
                 <div
@@ -55,7 +55,7 @@ export default async function ArchivePage() {
               <PostBody form={p.form as Form} body={p.body} imageIds={p.images.map((i) => i.id)} />
               {p.tags.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {p.tags.map((t) => <span key={t} className="label rounded-full bg-sage px-3 py-[5px] text-[11px] tracking-[0.06em] text-sage-ink">{t}</span>)}
+                  {p.tags.map((t) => <span key={t} className="label rounded-full border border-sage-fill bg-sage px-3 py-[5px] text-[11px] tracking-[0.06em] text-sage-ink">{t}</span>)}
                 </div>
               )}
               <div className="label mt-3 flex gap-4 text-[11px] tracking-[0.1em] text-ink-faint">

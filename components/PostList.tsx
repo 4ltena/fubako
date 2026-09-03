@@ -69,7 +69,7 @@ export function PostList({ posts, wears, circleId }: { posts: TimelinePost[]; we
   return (
     <>
       {fresh && (
-        <div className="flex items-center gap-3 rounded-full bg-sage py-3 pl-5 pr-3.5">
+        <div className="flex items-center gap-3 rounded-full border border-sage-fill bg-sage py-3 pl-5 pr-3.5">
           <span className="text-[13px] tracking-[0.06em] text-sage-deep">新しい紙がとどいています</span>
           <button
             type="button"
@@ -87,7 +87,7 @@ export function PostList({ posts, wears, circleId }: { posts: TimelinePost[]; we
         <button
           onClick={openUnconfirmed}
           disabled={busy}
-          className="label w-full rounded-full bg-sage px-5 py-3 text-[11px] tracking-[0.14em] text-sage-deep"
+          className="label w-full rounded-full border border-sage-fill bg-sage px-5 py-3 text-[11px] tracking-[0.14em] text-sage-deep"
         >
           未確認も開いて見る
         </button>

@@ -20,7 +20,7 @@ export default async function MutesPage() {
       {rules.length > 0 && (
         <ul className="mt-4 flex flex-wrap gap-2.5 rounded-[28px] bg-card p-6 shadow-paper">
           {rules.map((r) => (
-            <li key={r.id} className="flex items-center gap-3.5 rounded-full bg-veil px-[18px] py-3 text-sm tracking-[0.06em]">
+            <li key={r.id} className="flex items-center gap-3.5 rounded-full border border-edge bg-veil px-[18px] py-3 text-sm tracking-[0.06em]">
               {r.word}
               <ActionButton method="DELETE" url={`/api/me/mutes?id=${r.id}`} className="label text-[13px] text-ink-soft" aria-label="外す">×</ActionButton>
             </li>
@@ -28,7 +28,7 @@ export default async function MutesPage() {
         </ul>
       )}
 
-      <div className="mt-4 flex flex-col gap-3.5 rounded-[28px] bg-sage px-[22px] py-6">
+      <div className="mt-4 flex flex-col gap-3.5 rounded-[28px] border border-sage-fill bg-sage px-[22px] py-6">
         <span className="label text-[11px] tracking-[0.2em] text-sage-ink">いま起きていること</span>
         <p className="text-[13px] leading-[2.15] text-sage-deep">
           {rules.length > 0

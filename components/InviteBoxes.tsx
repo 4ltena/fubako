@@ -33,7 +33,7 @@ export function InviteBoxes({ from }: { from: string }) {
             {Array.from({ length: INVITE_LENGTH }, (_, i) => (
               <span
                 key={i}
-                className={`min-w-0 flex-1 rounded-[18px] py-4 text-center text-lg tracking-normal ${chars[i] ? "bg-card shadow-paper" : "bg-veil"}`}
+                className={`min-w-0 flex-1 rounded-[18px] border py-4 text-center text-lg tracking-normal ${chars[i] ? "border-edge bg-card shadow-paper" : "border-edge bg-veil"}`}
               >
                 {chars[i] ?? "　"}
               </span>

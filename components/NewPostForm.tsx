@@ -116,7 +116,7 @@ export function NewPostForm({ circleId, suggested, draftKey, afterPost = "push" 
         <span className="label text-[11px] tracking-[0.2em] text-ink-soft">タグ　—　このサークルでよく使う語</span>
         <div className="flex flex-wrap gap-2">
           {!writingTag && (
-            <button type="button" onClick={() => setWritingTag(true)} className="label rounded-full bg-veil px-4 py-2 text-xs tracking-[0.06em] text-ink-soft">
+            <button type="button" onClick={() => setWritingTag(true)} className="label rounded-full border border-edge bg-veil px-4 py-2 text-xs tracking-[0.06em] text-ink-soft">
               じぶんで書く
             </button>
           )}
@@ -126,7 +126,7 @@ export function NewPostForm({ circleId, suggested, draftKey, afterPost = "push" 
               type="button"
               onClick={() => toggleTag(t)}
               aria-pressed={chosen.includes(t)}
-              className={`label rounded-full px-4 py-2 text-xs tracking-[0.06em] ${chosen.includes(t) ? "bg-sage-fill text-sage-deep" : "bg-veil text-ink-faint"}`}
+              className={`label rounded-full border px-4 py-2 text-xs tracking-[0.06em] ${chosen.includes(t) ? "border-sage-ink/30 bg-sage-fill text-sage-deep" : "border-edge bg-veil text-ink-faint"}`}
             >
               {t}
             </button>
@@ -139,7 +139,7 @@ export function NewPostForm({ circleId, suggested, draftKey, afterPost = "push" 
             onChange={(e) => setTags(e.target.value)}
             maxLength={100}
             placeholder="空白で区切る"
-            className="rounded-full bg-veil px-5 py-2.5 text-sm placeholder:text-ink-pale focus:outline-none"
+            className="rounded-full border border-edge bg-veil px-5 py-2.5 text-sm placeholder:text-ink-pale focus:outline-none"
           />
         ) : null}
         <p className="text-xs leading-[2] text-ink-faint">つけなくても投げられます。ないときは、宣言している人にだけ伏せて届きます。</p>
@@ -147,7 +147,7 @@ export function NewPostForm({ circleId, suggested, draftKey, afterPost = "push" 
 
       <div className="flex flex-col gap-3.5 rounded-[28px] bg-card px-6 py-5 shadow-paper">
         <span className="label text-[11px] tracking-[0.2em] text-ink-soft">みんなから見えなくなるまで</span>
-        <div className="label flex gap-1.5 rounded-full bg-veil p-1.5 text-xs tracking-[0.1em]">
+        <div className="label flex gap-1.5 rounded-full border border-edge bg-veil p-1.5 text-xs tracking-[0.1em]">
           {DAYS.map((d) => (
             <button
               key={d}
@@ -165,7 +165,7 @@ export function NewPostForm({ circleId, suggested, draftKey, afterPost = "push" 
 
       <div className="flex flex-col gap-3.5 rounded-[28px] bg-card px-6 py-5 shadow-paper">
         <span className="label text-[11px] tracking-[0.2em] text-ink-soft">注意文　—　付けると全員に対して伏せて届く</span>
-        <input name="cw" maxLength={60} placeholder="書かなくていい" className="rounded-full bg-veil px-5 py-2.5 text-sm placeholder:text-ink-pale focus:outline-none" />
+        <input name="cw" maxLength={60} placeholder="書かなくていい" className="rounded-full border border-edge bg-veil px-5 py-2.5 text-sm placeholder:text-ink-pale focus:outline-none" />
         {images.length < MAX_IMAGES && (
           <input type="file" name="images" accept="image/jpeg,image/png,image/webp,image/gif" multiple onChange={(e) => pick(e.target.files)} className="label text-[11px] text-ink-faint file:mr-3 file:rounded-full file:border-0 file:bg-veil file:px-4 file:py-2 file:text-[11px] file:text-ink-soft" />
         )}

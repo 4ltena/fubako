@@ -7,7 +7,7 @@ import Link from "next/link";
 export function RightRail({ words }: { words: string[] }) {
   return (
     <aside className="hidden w-[296px] shrink-0 flex-col gap-3 py-10 xl:flex">
-      <div className="rounded-[26px] bg-sage px-[22px] py-6">
+      <div className="rounded-[26px] border border-sage-fill bg-sage px-[22px] py-6">
         <span className="label text-[11px] tracking-[0.2em] text-sage-ink">1日1回のたより</span>
         <p className="mt-3 text-[13px] leading-[2.15] text-sage-deep">
           次は今夜21時にまとめて渡します。それまで何も鳴りません。
@@ -21,7 +21,7 @@ export function RightRail({ words }: { words: string[] }) {
         ) : (
           <div className="mt-3 flex flex-wrap gap-2">
             {words.map((w) => (
-              <span key={w} className="label rounded-full bg-veil px-3 py-[5px] text-[11px] tracking-[0.06em] text-ink-soft">{w}</span>
+              <span key={w} className="label rounded-full border border-edge bg-veil px-3 py-[5px] text-[11px] tracking-[0.06em] text-ink-soft">{w}</span>
             ))}
           </div>
         )}
