@@ -1,15 +1,64 @@
 @import "tailwindcss";
 
+/* 配布されたデザイン（Organic）のトークン。色・影・角丸はここからだけ取る。
+   既存のトークン名（paper / card / ink / ink-soft / line / accent / veil）は
+   意味を保ったまま値を差し替えてある。 */
 @theme {
-  --color-paper: #f6f3ee;
-  --color-card: #fffdf9;
-  --color-ink: #2b2521;
-  --color-ink-soft: #6f655d;
-  --color-line: #e2dbd1;
-  --color-accent: #5b4a3f;
-  --color-veil: #ece6dd;
+  --color-paper: #efe4d2;      /* 台紙 */
+  --color-screen: #f5ead8;     /* 画面の地 */
+  --color-card: #f9f4ed;       /* 紙 = neutral-100 */
+  --color-veil: #eee7db;       /* 伏せた紙 = neutral-200 */
+  --color-line: #dcd3c4;       /* neutral-300 */
+  --color-ink: #201e1d;
+  --color-ink-soft: #645c50;   /* neutral-700 */
+  --color-ink-faint: #82796a;  /* neutral-600 */
+  --color-ink-pale: #c0b6a5;   /* neutral-400 */
+  --color-accent: #8c491a;     /* accent-700 */
+  --color-accent-deep: #643312;/* accent-800 */
+  --color-accent-pale: #fff2eb;/* accent-100 */
+  --color-sage: #f0fae1;       /* accent-2-100 */
+  --color-sage-fill: #e1eecc;  /* accent-2-200 */
+  --color-sage-ink: #56633f;   /* accent-2-700 */
+  --color-sage-deep: #3d472b;  /* accent-2-800 */
+
+  --shadow-paper: 0 1px 2px color-mix(in srgb, #2e2b25 14%, transparent);
+  --shadow-lift: 0 3px 10px color-mix(in srgb, #2e2b25 16%, transparent);
+
+  --radius-paper: 26px;
+  --radius-sheet: 28px;
+
+  --font-serif: var(--font-noto-serif-jp), "Hiragino Mincho ProN", "Yu Mincho", serif;
+  --font-label: var(--font-zen-kaku), "Hiragino Sans", "Yu Gothic", sans-serif;
 }
 
+/* 紙の目。薄い点を敷いて、平らな面にしない。 */
 body {
-  font-family: "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+  background-color: var(--color-paper);
+  background-image: radial-gradient(rgba(32, 30, 29, 0.045) 1px, transparent 1px);
+  background-size: 4px 4px;
+  color: var(--color-ink);
+  font-family: var(--font-serif);
+  letter-spacing: 0.05em;
+}
+
+/* 小さい字は明朝だと沈むので、ラベルだけゴシックに逃がす。 */
+.label {
+  font-family: var(--font-label);
+  letter-spacing: 0.16em;
+}
+
+/* 伏せた紙の面。罫線だけが見えて、字は見えない。 */
+.ruled {
+  background-image: repeating-linear-gradient(0deg, transparent 0 25px, rgba(32, 30, 29, 0.09) 25px 26px);
+}
+
+/* 下書き用の罫線（投稿画面）。 */
+.ruled-wide {
+  background-image: repeating-linear-gradient(0deg, transparent 0 35px, rgba(32, 30, 29, 0.07) 35px 36px);
+}
+
+/* 角は丸く、線はほとんど引かない。焦点は既定の青にしない。 */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { NewPostForm } from "@/components/NewPostForm";
 import { currentUserId } from "@/lib/auth";
@@ -12,6 +13,16 @@ export default async function NewPostPage({ params }: { params: Promise<{ circle
   const recent = await prisma.post.findMany({ where: { circleId, deletedAt: null, expiresAt: { gt: new Date() } }, select: { tags: true }, orderBy: { createdAt: "desc" }, take: 200 });
   const freq = new Map<string, number>();
   for (const t of recent.flatMap((p) => p.tags)) freq.set(t, (freq.get(t) ?? 0) + 1);
-  const suggested = [...freq.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12).map(([t]) => t);
-  return <NewPostForm circleId={circleId} suggested={suggested} />;
+  const suggested = [...freq.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([t]) => t);
+  const circle = (await prisma.circle.findUnique({ where: { id: circleId }, select: { name: true } }))!;
+  return (
+    <div>
+      <div className="mb-5 flex items-center justify-between px-1">
+        <Link href={`/c/${circleId}`} className="label text-xs tracking-[0.16em] text-ink-faint">とじる</Link>
+        <span className="text-[15px] tracking-[0.14em]">{circle.name}へ</span>
+        <span className="label invisible text-xs">とじる</span>
+      </div>
+      <NewPostForm circleId={circleId} suggested={suggested} />
+    </div>
+  );
 }
