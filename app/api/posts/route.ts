@@ -92,9 +92,10 @@ export async function POST(req: Request) {
   const files = fd ? fd.getAll("images").filter((f): f is File => f instanceof File && f.size > 0) : [];
 
   const body = (b.body ?? "").trim();
-  if (!body || body.length > 2000) return NextResponse.json({ error: "body" }, { status: 400 });
-  const cw = (b.cw ?? "").trim().slice(0, 60) || null;
   if (files.length > 4) return NextResponse.json({ error: "too many images" }, { status: 400 });
+  // 写真だけの紙（一枚）を通す。本文が空でよいのは画像があるときだけ。
+  if ((!body && files.length === 0) || body.length > 2000) return NextResponse.json({ error: "body" }, { status: 400 });
+  const cw = (b.cw ?? "").trim().slice(0, 60) || null;
   if (files.some((f) => !ACCEPTED_TYPES.has(f.type))) return NextResponse.json({ error: "image type" }, { status: 400 });
   const circleId = b.circleId ?? "";
   if (!(await isMember(userId, circleId))) return NextResponse.json({ error: "not found" }, { status: 404 });

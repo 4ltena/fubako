@@ -127,6 +127,62 @@ assert((await B(`/api/posts/${sY.id}`, { method: "DELETE" })).ok, "案内先を�
 tl = (await (await B("/api/posts?circleId=" + circle.id)).json()).posts;
 assert(!("similar" in tl.find((p) => p.id === sX.id)), "伏せられる投稿しか残らなければ案内を出さない");
 
+// 伏せた理由の種類と、伏せた紙が持たないもの
+tl = (await (await B("/api/posts?circleId=" + circle.id)).json()).posts;
+const kindById = Object.fromEntries(tl.map((p) => [p.id, p]));
+assert(kindById[fv.id].kind === "mute" && kindById[sZ.id].kind === "mute", "宣言した語で伏せた紙は kind=mute");
+assert(!("tags" in kindById[fv.id]), "伏せた紙はタグを持たない（一致しなかった語も渡さない）");
+const cwPost = await mk("注意文の本文", "推し");
+await db.query('UPDATE "Post" SET cw=$1 WHERE id=$2', ["写真の話", cwPost.id]);
+const noTag = await (await A("/api/posts", { method: "POST", body: JSON.stringify({ circleId: circle.id, body: "タグのない本文2" }) })).json();
+tl = (await (await B("/api/posts?circleId=" + circle.id)).json()).posts;
+const k2 = Object.fromEntries(tl.map((p) => [p.id, p]));
+assert(k2[cwPost.id].kind === "cw" && k2[cwPost.id].reason === "写真の話", "注意文で伏せた紙は kind=cw");
+assert(k2[noTag.id].kind === "unconfirmed" && k2[noTag.id].reason === "未確認", "タグの無い紙は kind=unconfirmed");
+
+// これは伏せておく（読み手が自分のためだけに伏せる。書き手には届かない）
+const own = await mk("自分で伏せる用の本文", "ぬいぐるみ");
+tl = (await (await B("/api/posts?circleId=" + circle.id)).json()).posts;
+assert(!tl.find((p) => p.id === own.id).veiled, "はじめは開いている");
+assert((await B(`/api/posts/${own.id}/veil`, { method: "POST" })).ok, "自分のために伏せる");
+tl = (await (await B("/api/posts?circleId=" + circle.id)).json()).posts;
+const veiledOwn = tl.find((p) => p.id === own.id);
+assert(veiledOwn.veiled && veiledOwn.kind === "self" && !("body" in veiledOwn), "伏せ直した紙は本文を持たない");
+assert(!(await (await A("/api/posts?circleId=" + circle.id)).json()).posts.find((p) => p.id === own.id).veiled, "書き手には何も起きない");
+assert((await A(`/api/posts/${own.id}/veil`, { method: "POST" })).status === 404, "自分の紙は伏せられない");
+assert((await C(`/api/posts/${own.id}/veil`, { method: "POST" })).status === 404, "非会員は伏せられない");
+assert((await B(`/api/posts/${own.id}/veil`, { method: "DELETE" })).ok, "伏せたのを戻す");
+assert(!(await (await B("/api/posts?circleId=" + circle.id)).json()).posts.find((p) => p.id === own.id).veiled, "戻すと開く");
+
+// 一枚（写真だけの紙）
+const onlyImage = new FormData();
+onlyImage.set("circleId", circle.id);
+onlyImage.set("body", "");
+onlyImage.append("images", new Blob([png], { type: "image/png" }), "only.png");
+const p5 = await (await A("/api/posts", { method: "POST", body: onlyImage, headers: { "content-type": undefined } })).json();
+assert(p5.id, "写真だけでも投げられる");
+assert((await (await A("/api/posts?circleId=" + circle.id)).json()).posts.find((p) => p.id === p5.id).form === "picture", "写真だけの紙は形が picture");
+const emptyBoth = new FormData();
+emptyBoth.set("circleId", circle.id);
+emptyBoth.set("body", "  ");
+assert((await A("/api/posts", { method: "POST", body: emptyBoth, headers: { "content-type": undefined } })).status === 400, "本文も写真も無ければ投げられない");
+
+// 招待の言葉
+assert([...circle.inviteCode].length === 10 && /^[ぁ-ん]+$/.test(circle.inviteCode), "招待の言葉はひらがな10文字");
+const E = await sessionFor("e@example.test", "E");
+const katakana = circle.inviteCode.replace(/[ぁ-ん]/g, (c) => String.fromCharCode(c.charCodeAt(0) + 0x60));
+assert((await E("/api/circles/join", { method: "POST", body: JSON.stringify({ inviteCode: " " + katakana + " " }) })).ok, "カタカナでも空白つきでも入れる");
+assert((await E("/api/circles/join", { method: "POST", body: JSON.stringify({ inviteCode: "あいうえおかきくけこ" }) })).status === 404, "違う言葉では入れない");
+const missForm = await E("/api/circles/join", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: "inviteCode=あいうえおかきくけこ&from=/" });
+assert(missForm.status === 303 && missForm.headers.get("location").includes("join=miss"), "画面から入り損ねたら JSON を出さずに戻す");
+
+// 箱を出る
+assert((await E("/api/circles/leave", { method: "POST", body: JSON.stringify({ circleId: circle.id, word: "ちがうことば" }) })).status === 400, "言葉が違えば出られない");
+assert((await E("/api/posts?circleId=" + circle.id)).ok, "出られていない");
+assert((await E("/api/circles/leave", { method: "POST", body: JSON.stringify({ circleId: circle.id, word: katakana }) })).ok, "言葉を書き写せば出られる");
+assert((await E("/api/posts?circleId=" + circle.id)).status === 404, "出たら箱は見えなくなる");
+assert((await E("/api/circles/join", { method: "POST", body: JSON.stringify({ inviteCode: circle.inviteCode }) })).ok, "同じ言葉でまた入れる");
+
 assert((await fetch(BASE + "/api/cron/digest")).status === 401, "cron は秘密なしで 401");
 const page = await (await B("/c/" + circle.id)).text();
 assert(page.includes("noindex") && !page.includes("og:") && !page.includes("ネタバレ本文") && !page.includes("タグなし本文") && page.includes("無害本文"), "画面 HTML にも伏せた本文が無く noindex");

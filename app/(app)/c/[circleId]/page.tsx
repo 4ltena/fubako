@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { PostCard } from "@/components/PostCard";
+import { PostList } from "@/components/PostList";
 import { currentUserId } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { seenAndPresentToday, timelineFor } from "@/lib/timeline";
@@ -15,8 +15,9 @@ function dateLine(d: Date): string {
   return `${kanji(d.getMonth() + 1)}月${kanji(d.getDate())}日　${WEEKDAYS[d.getDay()]}曜`;
 }
 
-export default async function TimelinePage({ params }: { params: Promise<{ circleId: string }> }) {
+export default async function TimelinePage({ params, searchParams }: { params: Promise<{ circleId: string }>; searchParams: Promise<{ leave?: string }> }) {
   const { circleId } = await params;
+  const missedLeave = (await searchParams).leave === "miss";
   const userId = (await currentUserId())!;
   const posts = await timelineFor(userId, circleId);
   if (posts === null) notFound();
@@ -40,14 +41,24 @@ export default async function TimelinePage({ params }: { params: Promise<{ circl
           <p className="label rounded-full bg-sage px-5 py-3 text-[13px] tracking-[0.06em] text-sage-deep">今日、この場に来た人がいます</p>
         )}
         {posts.length === 0 && <p className="px-1 text-sm leading-[2.1] text-ink-soft">ここにはまだ何もありません。読まれないことを書いておく場所としても使えます。</p>}
-        {posts.map((p) => (
-          <PostCard key={p.id} post={p} wear={wearOf(new Date(p.createdAt), new Date(p.expiresAt), now)} />
-        ))}
+        <PostList posts={posts} wears={Object.fromEntries(posts.map((p) => [p.id, wearOf(new Date(p.createdAt), new Date(p.expiresAt), now)]))} />
       </div>
 
       <details className="label mt-6 px-1 text-[11px] tracking-[0.14em] text-ink-faint">
-        <summary>招待リンク</summary>
-        <code className="mt-2 block select-all break-all rounded-[20px] bg-card p-3 tracking-normal">{inviteUrl}</code>
+        <summary>この箱の言葉</summary>
+        <div className="mt-2 space-y-3 rounded-[20px] bg-card p-4 tracking-normal">
+          <p className="select-all text-lg tracking-[0.2em] text-ink">{circle.inviteCode}</p>
+          <p className="label text-[11px] leading-[1.9] tracking-[0.08em]">この言葉をもらった人だけが入れます。リンクでも渡せます。</p>
+          <code className="block select-all break-all text-[11px] text-ink-faint">{inviteUrl}</code>
+          <form method="post" action="/api/circles/leave" className="flex items-center gap-2 border-t border-line pt-3">
+            <input type="hidden" name="circleId" value={circleId} />
+            <input name="word" required maxLength={60} placeholder="出るには、この言葉を書き写す" className="flex-1 bg-transparent text-[13px] tracking-normal placeholder:text-ink-pale focus:outline-none" />
+            <button className="label shrink-0 rounded-full bg-veil px-4 py-2 text-[11px] tracking-[0.14em] text-ink-soft">この箱を出る</button>
+          </form>
+          <p className="label text-[11px] leading-[1.9] tracking-[0.08em]">
+            {missedLeave ? "言葉が違います。出るのはやめておきました。" : "出ても、書いた紙はじぶんの箱に残ります。この言葉があれば、また入れます。"}
+          </p>
+        </div>
       </details>
     </div>
   );

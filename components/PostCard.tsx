@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Blurhash } from "@/components/Blurhash";
 import type { Form } from "@/lib/form";
 import type { TimelinePost } from "@/lib/timeline";
@@ -75,14 +76,20 @@ function Meta({ name, at }: { name: string; at: string }) {
   );
 }
 
-export function PostCard({ post, wear = 0 }: { post: TimelinePost; wear?: number }) {
-  const [opened, setOpened] = useState<{ body: string; imageIds: string[] } | null>(post.veiled ? null : { body: post.body, imageIds: post.imageIds });
+export function PostCard({ post, wear = 0, preopened = null }: { post: TimelinePost; wear?: number; preopened?: { body: string; imageIds: string[] } | null }) {
+  // 開いた本文はサーバから取り直したものだけを持つ。表示は毎回 props から導く。
+  // （state を初期値だけで持つと、伏せ直したあとサーバが伏せて返しても紙が開いたまま残る）
+  const [revealed, setRevealed] = useState<{ body: string; imageIds: string[] } | null>(null);
+  const [reacted, setReacted] = useState(post.reacted);
+  const [loading, setLoading] = useState(false);
+  const router = useRouter();
+  // preopened は一覧側で「未確認も開いて見る」を押したときに渡ってくる本文。
+  const opened = post.veiled ? (revealed ?? preopened) : { body: post.body, imageIds: post.imageIds };
   // 伏せた投稿は form を持たない。開いたあとも形は使わず通常表示にする。
   const form: Form = post.veiled ? "text" : post.form;
   // 相手の投稿者名も本文も出さない。飛び先の id だけ持つ。
   const similarId = post.veiled ? null : (post.similar?.postId ?? null);
-  const [reacted, setReacted] = useState(post.reacted);
-  const [loading, setLoading] = useState(false);
+  const tags = post.veiled ? [] : post.tags;
 
   /** 近い投稿まで運ぶ。ページは変えない。 */
   function goToSimilar() {
@@ -98,7 +105,7 @@ export function PostCard({ post, wear = 0 }: { post: TimelinePost; wear?: number
   async function reveal() {
     setLoading(true);
     const r = await fetch(`/api/posts/${post.id}/reveal`);
-    if (r.ok) setOpened((await r.json()) as { body: string; imageIds: string[] });
+    if (r.ok) setRevealed((await r.json()) as { body: string; imageIds: string[] });
     setLoading(false);
   }
   async function react() {
@@ -106,10 +113,33 @@ export function PostCard({ post, wear = 0 }: { post: TimelinePost; wear?: number
     const r = await fetch(`/api/posts/${post.id}/react`, { method: "POST" });
     if (r.ok) setReacted(((await r.json()) as { reacted: boolean }).reacted);
   }
+  /** この紙を自分のためだけに伏せる。書き手には何も届かない。あとから戻せる。 */
+  async function veilForMe() {
+    setLoading(true);
+    const r = await fetch(`/api/posts/${post.id}/veil`, { method: "POST" });
+    if (r.ok) {
+      setRevealed(null);
+      router.refresh();
+    }
+    setLoading(false);
+  }
+  async function unveilForMe() {
+    setLoading(true);
+    const r = await fetch(`/api/posts/${post.id}/veil`, { method: "DELETE" });
+    if (r.ok) router.refresh();
+    setLoading(false);
+  }
 
-  const reason = post.veiled ? post.reason : "";
-  // 伏せた理由。未確認だけは言い方を変える（書いた人の落ち度ではないため）。
-  const reasonText = reason === "未確認" ? "未確認　タグがありません" : `伏せています　${reason}`;
+  // 伏せた理由の文言。種類ごとに言い方を変える（書いた人の落ち度にしない）。
+  const reasonText = !post.veiled
+    ? ""
+    : post.kind === "unconfirmed"
+      ? "未確認　タグがありません"
+      : post.kind === "cw"
+        ? `書いた人が先に断っています　${post.reason}`
+        : post.kind === "self"
+          ? "自分で伏せています"
+          : `宣言した語と一致しました　${post.reason}`;
 
   if (opened === null) {
     return (
@@ -134,6 +164,11 @@ export function PostCard({ post, wear = 0 }: { post: TimelinePost; wear?: number
               <span className="label ml-auto shrink-0 rounded-full bg-ink-faint px-[18px] py-[7px] text-[11px] text-card">ひらく</span>
             </span>
           </button>
+          {post.veiled && post.kind === "self" && (
+            <button onClick={unveilForMe} disabled={loading} className="label mt-3 block text-[11px] tracking-[0.08em] text-ink-faint underline underline-offset-4">
+              伏せたのを戻す
+            </button>
+          )}
         </div>
       </article>
     );
@@ -144,6 +179,9 @@ export function PostCard({ post, wear = 0 }: { post: TimelinePost; wear?: number
       <Wearing id={post.id} wear={wear} />
       <div className="relative">
         <Meta name={post.authorName} at={post.createdAt} />
+        {post.veiled && post.kind === "cw" && (
+          <p className="label mt-3 text-[11px] leading-[1.8] tracking-[0.06em] text-ink-faint">書いた人が先に断っています　{post.reason}</p>
+        )}
         <PostBody form={form} body={opened.body} imageIds={opened.imageIds} />
         {similarId && (
           <button type="button" onClick={goToSimilar} className="label mt-3 block text-[11px] tracking-[0.08em] text-ink-faint underline underline-offset-4">
@@ -151,18 +189,23 @@ export function PostCard({ post, wear = 0 }: { post: TimelinePost; wear?: number
           </button>
         )}
         <div className="mt-3 flex items-center gap-2">
-          {post.tags.map((t) => (
+          {tags.map((t) => (
             <span key={t} className="label rounded-full bg-sage px-3 py-[5px] text-[11px] tracking-[0.06em] text-sage-ink">{t}</span>
           ))}
           {!post.mine && (
-            <button
-              onClick={react}
-              aria-pressed={reacted}
-              aria-label={reacted ? "届いた" : "届ける"}
-              className={`ml-auto flex size-[42px] shrink-0 items-center justify-center rounded-full text-[15px] ${reacted ? "bg-accent-pale text-accent" : "bg-veil text-ink-faint"}`}
-            >
-              届
-            </button>
+            <>
+              <button onClick={veilForMe} disabled={loading} className="label text-[11px] tracking-[0.08em] text-ink-faint underline underline-offset-4">
+                これは伏せておく
+              </button>
+              <button
+                onClick={react}
+                aria-pressed={reacted}
+                aria-label={reacted ? "届いた" : "届ける"}
+                className={`ml-auto flex size-[42px] shrink-0 items-center justify-center rounded-full text-[15px] ${reacted ? "bg-accent-pale text-accent" : "bg-veil text-ink-faint"}`}
+              >
+                届
+              </button>
+            </>
           )}
         </div>
       </div>

@@ -1,6 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { browserStore, clearDraft, loadDraft, saveDraft } from "@/lib/draft";
 
 const MAX_EDGE = 2048;
 const MAX_IMAGES = 4;
@@ -25,6 +26,25 @@ export function NewPostForm({ circleId, suggested }: { circleId: string; suggest
   const [error, setError] = useState<string | null>(null);
   const [tags, setTags] = useState("");
   const [days, setDays] = useState(7);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 書きかけを端末から戻す。DOM に直接入れるので、state もハイドレーションも動かさない。
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (el && el.value === "") el.value = loadDraft(circleId, browserStore(), Date.now());
+  }, [circleId]);
+
+  /** 打つたびに残す（少し待ってから）。件数も「下書きがあります」も出さない。 */
+  function keep(body: string) {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => saveDraft(circleId, body, browserStore(), Date.now()), 600);
+  }
+
+  function discard() {
+    if (bodyRef.current) bodyRef.current.value = "";
+    clearDraft(circleId, browserStore());
+  }
 
   async function pick(files: FileList | null) {
     if (!files) return;
@@ -51,6 +71,9 @@ export function NewPostForm({ circleId, suggested }: { circleId: string; suggest
     images.forEach((img, i) => fd.append("images", img.blob, `${i}.jpg`));
     const r = await fetch("/api/posts", { method: "POST", body: fd });
     if (r.ok) {
+      // 投げ終わった本文を端末に残さない
+      if (timer.current) clearTimeout(timer.current);
+      clearDraft(circleId, browserStore());
       router.push(`/c/${circleId}`);
       router.refresh();
       return;
@@ -68,14 +91,20 @@ export function NewPostForm({ circleId, suggested }: { circleId: string; suggest
 
       <div className="rounded-[28px] bg-card px-6 py-6 shadow-paper">
         <textarea
+          ref={bodyRef}
           name="body"
-          required
+          required={images.length === 0}
           maxLength={2000}
           rows={5}
           autoFocus
-          placeholder="雑に投げる"
+          onChange={(e) => keep(e.target.value)}
+          placeholder={images.length > 0 ? "写真だけでもいい" : "雑に投げる"}
           className="ruled-wide block w-full resize-none bg-transparent text-[16px] leading-[36px] placeholder:text-ink-pale focus:outline-none"
         />
+        <div className="mt-3 flex items-center gap-3">
+          <span className="label text-[11px] tracking-[0.1em] text-ink-faint">書きかけはこの端末に残ります</span>
+          <button type="button" onClick={discard} className="label ml-auto text-[11px] tracking-[0.1em] text-ink-faint underline underline-offset-4">捨てる</button>
+        </div>
       </div>
 
       <div className="flex flex-col gap-3.5 rounded-[28px] bg-card px-6 py-5 shadow-paper">

@@ -3,15 +3,15 @@ import { prisma } from "@/lib/db";
 import type { Form } from "@/lib/form";
 import { presentToday, shouldTouchSeen } from "@/lib/presence";
 import { pickSimilar } from "@/lib/similar";
-import { veilFor } from "@/lib/veil";
+import { veilFor, type VeilKind } from "@/lib/veil";
 import { isVisibleTo } from "@/lib/visibility";
 
 /**
  * 読み手に渡す投稿。伏せた投稿は body と画像 ID を持たない（サーバ側で落とす）。
  * 反応の数は持たない。自分が反応したかだけ持つ。
  *
- * form と similar は伏せた投稿には載せない。形も、近い投稿があること自体も、
- * 伏せた本文の内容を示してしまうため。
+ * form と similar と tags は伏せた投稿には載せない。形も、近い投稿があることも、
+ * 一致しなかった側のタグも、伏せた本文の内容を示してしまうため。
  * terms（形態素）はここから外に出さない。
  */
 export type TimelineImage = { blurhash: string; width: number; height: number };
@@ -20,14 +20,13 @@ export type TimelinePost = {
   id: string;
   authorName: string;
   mine: boolean;
-  tags: string[];
   createdAt: string;
   expiresAt: string;
   reacted: boolean;
   images: TimelineImage[];
 } & (
-  | { veiled: false; body: string; imageIds: string[]; form: Form; similar?: { postId: string } }
-  | { veiled: true; reason: string }
+  | { veiled: false; body: string; imageIds: string[]; form: Form; tags: string[]; similar?: { postId: string } }
+  | { veiled: true; reason: string; kind: VeilKind }
 );
 
 export async function muteWordsOf(userId: string): Promise<string[]> {
@@ -79,6 +78,8 @@ export async function timelineFor(userId: string, circleId: string): Promise<Tim
         deletedAt: true,
         author: { select: { name: true } },
         reactions: { where: { userId }, select: { userId: true } },
+        // 読み手自身が伏せた紙かどうか。自分の行だけを引くので、他人の伏せ直しは1行も読まない
+        veils: { where: { userId }, select: { userId: true } },
         images: { orderBy: { createdAt: "asc" }, select: { id: true, blurhash: true, width: true, height: true } },
       },
     }),
@@ -87,7 +88,10 @@ export async function timelineFor(userId: string, circleId: string): Promise<Tim
   // 伏せ判定を先に済ませてから突き合わせる。伏せられる投稿へは案内しない。
   const entries = posts
     .filter((p) => isVisibleTo(p, userId, now))
-    .map((p) => ({ post: p, veil: p.authorId === userId ? ({ veiled: false } as const) : veilFor(p.tags, mutes, p.cw) }));
+    .map((p) => ({
+      post: p,
+      veil: p.authorId === userId ? ({ veiled: false } as const) : veilFor(p.tags, mutes, p.cw, { selfVeiled: p.veils.length > 0 }),
+    }));
   // 突き合わせの相手は、いま読み手のタイムラインに載っている投稿だけ（飛び先の無い案内を出さない）。
   const candidates = entries.map((e) => ({ id: e.post.id, authorId: e.post.authorId, terms: e.post.terms, veiled: e.veil.veiled }));
 
@@ -97,13 +101,12 @@ export async function timelineFor(userId: string, circleId: string): Promise<Tim
         id: p.id,
         authorName: p.author.name ?? "名無し",
         mine: p.authorId === userId,
-        tags: p.tags,
         createdAt: p.createdAt.toISOString(),
         expiresAt: p.expiresAt.toISOString(),
         reacted: p.reactions.length > 0,
         images: p.images.map(({ blurhash, width, height }) => ({ blurhash, width, height })),
       };
-      if (veil.veiled) return { ...common, veiled: true as const, reason: veil.reason };
+      if (veil.veiled) return { ...common, veiled: true as const, reason: veil.reason, kind: veil.kind };
       // 自分の投稿には出さない。相手が伏せられる投稿でも出さない（pickSimilar が落とす）。
       const similar = p.authorId === userId ? null : pickSimilar(candidates.find((c) => c.id === p.id)!, candidates);
       return {
@@ -112,6 +115,7 @@ export async function timelineFor(userId: string, circleId: string): Promise<Tim
         body: p.body,
         imageIds: p.images.map((i) => i.id),
         form: p.form as Form,
+        tags: p.tags,
         ...(similar ? { similar } : {}),
       };
     });

@@ -23,6 +23,7 @@ model User {
   reactions   Reaction[]
   muteRules   MuteRule[]
   circles     Circle[]
+  postVeils   PostVeil[]
 }
 
 model Account {
@@ -86,23 +87,26 @@ model Membership {
 }
 
 model Post {
-  id        String     @id @default(cuid())
-  circleId  String
-  authorId  String
-  body      String
-  tags      String[]   @default([])
-  createdAt DateTime   @default(now())
-  expiresAt DateTime
-  deletedAt DateTime?
-  cw        String?
+  id                 String     @id @default(cuid())
+  circleId           String
+  authorId           String
+  body               String
+  tags               String[]   @default([])
+  createdAt          DateTime   @default(now())
+  expiresAt          DateTime
+  deletedAt          DateTime?
+  cw                 String?
+  // ダイジェストで反応を知らせた時刻。同じ反応で二度知らせないための印。
+  reactionNotifiedAt DateTime?
   // 投稿の「形」。書き手には選ばせず lib/form.ts が本文と画像から決める。
-  form      String     @default("text")
+  form               String     @default("text")
   // 形態素解析で取り出した語。重い順に並ぶ。API では返さない（lib/similar.ts でだけ使う）。
-  terms     String[]   @default([])
-  images    Image[]
-  circle    Circle     @relation(fields: [circleId], references: [id], onDelete: Cascade)
-  author    User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  reactions Reaction[]
+  terms              String[]   @default([])
+  images             Image[]
+  circle             Circle     @relation(fields: [circleId], references: [id], onDelete: Cascade)
+  author             User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  reactions          Reaction[]
+  veils              PostVeil[]
 
   @@index([circleId, createdAt])
   @@index([authorId, createdAt])
@@ -116,6 +120,18 @@ model Reaction {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([postId, userId])
+}
+
+/// 読み手が自分でその投稿だけを伏せた記録。書き手には見せず、どこでも数えない。
+/// 語は持たない（語で守るのは MuteRule の役目。ここは「この紙は閉じておく」だけ）。
+model PostVeil {
+  userId    String
+  postId    String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@id([userId, postId])
 }
 
 model MuteRule {

@@ -29,9 +29,9 @@ for (const u of USERS) {
 const [hinata, sora, rin, yuu] = USERS.map((u) => users[u.email]);
 
 const circleId = id();
-await db.query(`INSERT INTO "Circle"(id,name,"inviteCode","createdById") VALUES($1,$2,$3,$4)`, [circleId, "同担のへや", "seed-invite-code", hinata]);
+await db.query(`INSERT INTO "Circle"(id,name,"inviteCode","createdById") VALUES($1,$2,$3,$4)`, [circleId, "同担のへや", "ゆうやけこやけのみち", hinata]);
 for (const uid of [hinata, sora, rin, yuu]) await db.query(`INSERT INTO "Membership"("userId","circleId") VALUES($1,$2)`, [uid, circleId]);
-// nao はどこにも入っていない（招待リンク http://localhost:3000/join/seed-invite-code を試す用）
+// nao はどこにも入っていない（招待リンク http://localhost:3000/join/ゆうやけこやけのみち を試す用）
 
 const POSTS = [
   [hinata, "今日の配信の最後の曲、泣いた", ["配信"], 7],
@@ -62,7 +62,7 @@ for (const w of ["ネタバレ", "愚痴"]) await db.query(`INSERT INTO "MuteRul
 await db.query(`INSERT INTO "Reaction"("postId","userId") VALUES($1,$2),($1,$3)`, [postIds[0], sora, rin]);
 await db.query(`INSERT INTO "Reaction"("postId","userId") VALUES($1,$2)`, [postIds[2], hinata]);
 
-console.log("サークル: 同担のへや  招待: http://localhost:3000/join/seed-invite-code\n");
+console.log("サークル: 同担のへや  招待: http://localhost:3000/join/ゆうやけこやけのみち\n");
 const base = process.env.APP_URL ?? "http://localhost:3000";
 console.log("ログイン用リンク（ブラウザに貼るだけでそのユーザーとして入る。開発時のみ有効）");
 for (const u of USERS) {

@@ -14,6 +14,12 @@ export function done(req: Request, redirectTo: string, json: unknown = { ok: tru
   return isForm ? NextResponse.redirect(new URL(redirectTo, req.url), 303) : NextResponse.json(json);
 }
 
+/** done の裏返し。ネイティブ form には画面へ戻す。fetch/JSON には現状どおりの JSON を返す。 */
+export function fail(req: Request, redirectTo: string, status: number, json: unknown) {
+  const isForm = (req.headers.get("content-type") ?? "").includes("x-www-form-urlencoded");
+  return isForm ? NextResponse.redirect(new URL(redirectTo, req.url), 303) : NextResponse.json(json, { status });
+}
+
 export async function readBody(req: Request): Promise<Record<string, string>> {
   const ct = req.headers.get("content-type") ?? "";
   if (ct.includes("json")) return (await req.json()) as Record<string, string>;

@@ -24,6 +24,7 @@ export default async function JoinPage({ params }: { params: Promise<{ inviteCod
       ) : (
         <form method="post" action="/api/circles/join" className="mt-5">
           <input type="hidden" name="inviteCode" value={inviteCode} />
+          <input type="hidden" name="from" value={`/join/${inviteCode}`} />
           <button className="label w-full rounded-full bg-accent py-[18px] text-sm tracking-[0.3em] text-card shadow-lift">入る</button>
         </form>
       )}
