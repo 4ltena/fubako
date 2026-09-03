@@ -40,8 +40,17 @@ export default async function TimelinePage({ params, searchParams }: { params: P
         {presentToday && (
           <p className="label rounded-full bg-sage px-5 py-3 text-[13px] tracking-[0.06em] text-sage-deep">今日、この場に来た人がいます</p>
         )}
-        {posts.length === 0 && <p className="px-1 text-sm leading-[2.1] text-ink-soft">ここにはまだ何もありません。読まれないことを書いておく場所としても使えます。</p>}
-        <PostList posts={posts} wears={Object.fromEntries(posts.map((p) => [p.id, wearOf(new Date(p.createdAt), new Date(p.expiresAt), now)]))} />
+        {posts.length === 0 && (
+          <div className="flex flex-col gap-[18px] rounded-[26px] bg-card px-6 pb-7 pt-[34px] shadow-paper">
+            <p className="text-[15px] leading-[2.2] text-ink-soft">ここにはまだ何もありません。読まれないことを書いておく場所としても使えます。</p>
+            <Link href={`/c/${circleId}/new`} className="label self-start rounded-full bg-accent px-7 py-3.5 text-xs tracking-[0.2em] text-card">はじめに一通書く</Link>
+          </div>
+        )}
+        <PostList
+          posts={posts}
+          circleId={circleId}
+          wears={Object.fromEntries(posts.map((p) => [p.id, wearOf(new Date(p.createdAt), new Date(p.expiresAt), now)]))}
+        />
       </div>
 
       <details className="label mt-6 px-1 text-[11px] tracking-[0.14em] text-ink-faint">

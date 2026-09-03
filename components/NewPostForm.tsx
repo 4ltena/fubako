@@ -25,6 +25,7 @@ export function NewPostForm({ circleId, suggested, draftKey }: { circleId: strin
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tags, setTags] = useState("");
+  const [writingTag, setWritingTag] = useState(false);
   const [days, setDays] = useState(7);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -112,6 +113,11 @@ export function NewPostForm({ circleId, suggested, draftKey }: { circleId: strin
       <div className="flex flex-col gap-3.5 rounded-[28px] bg-card px-6 py-5 shadow-paper">
         <span className="label text-[11px] tracking-[0.2em] text-ink-soft">タグ　—　このサークルでよく使う語</span>
         <div className="flex flex-wrap gap-2">
+          {!writingTag && (
+            <button type="button" onClick={() => setWritingTag(true)} className="label rounded-full bg-veil px-4 py-2 text-xs tracking-[0.06em] text-ink-soft">
+              じぶんで書く
+            </button>
+          )}
           {suggested.map((t) => (
             <button
               key={t}
@@ -124,13 +130,16 @@ export function NewPostForm({ circleId, suggested, draftKey }: { circleId: strin
             </button>
           ))}
         </div>
-        <input
-          value={tags}
-          onChange={(e) => setTags(e.target.value)}
-          maxLength={100}
-          placeholder="じぶんで書く（空白区切り）"
-          className="rounded-full bg-veil px-5 py-2.5 text-sm placeholder:text-ink-pale focus:outline-none"
-        />
+        {writingTag ? (
+          <input
+            autoFocus
+            value={tags}
+            onChange={(e) => setTags(e.target.value)}
+            maxLength={100}
+            placeholder="空白で区切る"
+            className="rounded-full bg-veil px-5 py-2.5 text-sm placeholder:text-ink-pale focus:outline-none"
+          />
+        ) : null}
         <p className="text-xs leading-[2] text-ink-faint">つけなくても投げられます。ないときは、宣言している人にだけ伏せて届きます。</p>
       </div>
 
@@ -163,7 +172,7 @@ export function NewPostForm({ circleId, suggested, draftKey }: { circleId: strin
             {images.map((img, i) => (
               <li key={img.url} className="relative">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={img.url} alt="" className="aspect-square w-full rounded-[16px] object-cover" />
+                <img src={img.url} alt="" className="washed aspect-square w-full rounded-[16px] object-cover" />
                 <button type="button" onClick={() => setImages(images.filter((_, j) => j !== i))} aria-label="外す" className="absolute right-1 top-1 rounded-full bg-card/90 px-2 text-xs">×</button>
               </li>
             ))}

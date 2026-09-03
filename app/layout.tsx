@@ -15,7 +15,14 @@ export const metadata: Metadata = {
   appleWebApp: { capable: true, title: "ふばこ" },
 };
 
-export const viewport: Viewport = { themeColor: "#efe4d2", width: "device-width", initialScale: 1 };
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f5ead8" },
+    { media: "(prefers-color-scheme: dark)", color: "#2a231d" },
+  ],
+  width: "device-width",
+  initialScale: 1,
+};
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (

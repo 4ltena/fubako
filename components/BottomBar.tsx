@@ -16,7 +16,7 @@ export function BottomBar() {
     { href: "/settings/mutes", label: "宣言", active: path.startsWith("/settings") },
   ];
   return (
-    <nav className="pointer-events-none fixed inset-x-0 bottom-0 z-10 px-5 pb-6">
+    <nav className="pointer-events-none fixed inset-x-0 bottom-0 z-10 px-5 pb-6 md:hidden">
       <div className="label pointer-events-auto mx-auto flex max-w-md items-center gap-1.5 rounded-full bg-card p-2 text-xs shadow-lift">
         {items.map((i) => (
           <Link

@@ -201,6 +201,20 @@ assert((await C(`/api/images/${fImg}`)).status === 404, "非会員は相変わ�
 const evil = await B("/api/circles/join", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: "inviteCode=あいうえおかきくけこ&from=//example.com" });
 assert(evil.status === 303 && new URL(evil.headers.get("location"), BASE).origin === BASE, "外部への戻り先は受け付けない");
 
+// 新しい紙が来たかどうか（真偽値だけ・会員だけ）
+const nowIso = new Date().toISOString();
+const freshBefore = await (await B(`/api/circles/${circle.id}/fresh?since=${encodeURIComponent(nowIso)}`)).json();
+assert(freshBefore.fresh === false && Object.keys(freshBefore).length === 1, "新着は真偽値だけを返す");
+await mk("新しく置いた紙", "推し");
+const freshAfter = await (await B(`/api/circles/${circle.id}/fresh?since=${encodeURIComponent(nowIso)}`)).json();
+assert(freshAfter.fresh === true, "他の人が置いたら新着になる");
+const mine = await (await B("/api/posts", { method: "POST", body: JSON.stringify({ circleId: circle.id, body: "自分で置いた紙", tags: "推し" }) })).json();
+assert(mine.id, "読み手も紙を置く");
+const afterMine = await (await B(`/api/circles/${circle.id}/fresh?since=${encodeURIComponent(new Date().toISOString())}`)).json();
+assert(afterMine.fresh === false, "自分が置いた紙は新着にしない");
+assert((await C(`/api/circles/${circle.id}/fresh?since=${encodeURIComponent(nowIso)}`)).status === 404, "非会員は新着を聞けない");
+assert((await B(`/api/circles/${circle.id}/fresh?since=x`)).status === 400, "時刻が壊れていれば 400");
+
 assert((await fetch(BASE + "/api/cron/digest")).status === 401, "cron は秘密なしで 401");
 const page = await (await B("/c/" + circle.id)).text();
 assert(page.includes("noindex") && !page.includes("og:") && !page.includes("ネタバレ本文") && !page.includes("タグなし本文") && page.includes("無害本文"), "画面 HTML にも伏せた本文が無く noindex");

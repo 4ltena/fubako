@@ -37,7 +37,7 @@ export default async function MutesPage() {
         </p>
       </div>
 
-      <p className="label mt-6 px-1 text-[11px] tracking-[0.1em] text-ink-faint">漏れていたら、投稿から静かに知らせられます</p>
+      <p className="label mt-6 px-1 text-[11px] tracking-[0.1em] text-ink-faint">漏れていたら、その紙の「…」からその場で伏せられます</p>
     </div>
   );
 }

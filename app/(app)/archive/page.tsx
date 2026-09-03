@@ -3,7 +3,7 @@ import { PostBody } from "@/components/PostCard";
 import { currentUserId } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import type { Form } from "@/lib/form";
-import { isFolded, marksOf, paperTexture, wearOf } from "@/lib/wear";
+import { foldsRight, foldStyle, isFolded, marksOf, paperTexture, wearOf } from "@/lib/wear";
 
 function isExpired(d: Date) {
   return d.getTime() <= Date.now();
@@ -42,8 +42,8 @@ export default async function ArchivePage() {
               {isFolded(wear) && (
                 <div
                   aria-hidden
-                  className={`pointer-events-none absolute top-0 h-7 w-7 ${marksOf(p.id).foldRight ? "right-0" : "left-0"}`}
-                  style={{ background: `linear-gradient(${marksOf(p.id).foldRight ? 225 : 135}deg, var(--color-paper) 48%, rgba(32,30,29,0.07) 50%, transparent 60%)` }}
+                  className={`pointer-events-none absolute top-0 h-7 w-7 ${foldsRight(p.id) ? "right-0" : "left-0"}`}
+                  style={foldStyle(p.id)}
                 />
               )}
               <div className="label flex items-baseline gap-3 text-[11px] tracking-[0.12em] text-ink-soft">

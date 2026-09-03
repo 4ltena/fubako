@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { InviteBoxes } from "@/components/InviteBoxes";
 import { currentUserId, signOut } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
@@ -41,11 +42,12 @@ export default async function CirclesPage({ searchParams }: { searchParams: Prom
         ))}
       </ul>
 
-      <form method="post" action="/api/circles/join" className="mt-6 flex items-center gap-2.5 rounded-full bg-card p-2 pl-6 shadow-paper">
-        <input type="hidden" name="from" value="/" />
-        <input name="inviteCode" required maxLength={60} placeholder="もらった言葉" className="flex-1 bg-transparent text-[15px] placeholder:text-ink-pale focus:outline-none" />
-        <button className="label shrink-0 rounded-full bg-veil px-6 py-3 text-xs tracking-[0.16em] text-ink-soft">入る</button>
-      </form>
+      <div className="mt-8">
+        <span className="label text-[11px] tracking-[0.2em] text-ink-soft">もらった言葉を入れる</span>
+        <div className="mt-3">
+          <InviteBoxes from="/" />
+        </div>
+      </div>
       {missed && <p className="label mt-2 px-1 text-[11px] tracking-[0.1em] text-ink-faint">その言葉では入れませんでした。もう一度もらってください。</p>}
 
       <form method="post" action="/api/circles" className="mt-4 flex items-center gap-2.5 rounded-full bg-card p-2 pl-6 shadow-paper">

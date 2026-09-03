@@ -15,5 +15,5 @@ export function Blurhash({ hash, width, height }: { hash: string; width: number;
     img.data.set(pixels);
     ctx.putImageData(img, 0, 0);
   }, [hash, h]);
-  return <canvas ref={ref} width={w} height={h} className="h-full w-full rounded object-cover" style={{ aspectRatio: `${width} / ${height}` }} />;
+  return <canvas ref={ref} width={w} height={h} className="washed-veiled h-full w-full rounded object-cover" style={{ aspectRatio: `${width} / ${height}` }} />;
 }

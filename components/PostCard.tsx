@@ -1,24 +1,40 @@
 "use client";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Blurhash } from "@/components/Blurhash";
 import type { Form } from "@/lib/form";
 import type { TimelinePost } from "@/lib/timeline";
-import { isFolded, marksOf, paperTexture } from "@/lib/wear";
+import { foldsRight, foldStyle, isFolded, paperTexture } from "@/lib/wear";
 
 export function ImageGrid({ ids }: { ids: string[] }) {
+  const [open, setOpen] = useState<string | null>(null);
   if (ids.length === 0) return null;
   return (
-    <ul className={`mt-3 grid gap-2 ${ids.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
-      {ids.map((id) => (
-        <li key={id}>
-          <a href={`/api/images/${id}`} target="_blank" rel="noreferrer">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={`/api/images/${id}`} alt="" loading="lazy" className="w-full rounded-[20px] object-cover" />
-          </a>
-        </li>
-      ))}
-    </ul>
+    <>
+      <ul className={`mt-3 grid gap-2 ${ids.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
+        {ids.map((id) => (
+          <li key={id}>
+            <button type="button" onClick={() => setOpen(id)} className="block w-full">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={`/api/images/${id}`} alt="" loading="lazy" className="washed w-full rounded-[20px] object-cover" />
+            </button>
+          </li>
+        ))}
+      </ul>
+      {open && (
+        // その場で大きく見る。枚数も順番も出さない。
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setOpen(null)}
+          className="fixed inset-0 z-30 flex items-center justify-center bg-paper/90 p-6"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={`/api/images/${open}`} alt="" className="max-h-full max-w-full rounded-[26px] object-contain shadow-lift" />
+          <button type="button" onClick={() => setOpen(null)} className="label absolute right-6 top-6 rounded-full bg-card px-4 py-2 text-[11px] tracking-[0.14em] text-ink-soft shadow-paper">とじる</button>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -31,14 +47,7 @@ function Wearing({ id, wear }: { id: string; wear: number }) {
   return (
     <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[26px]">
       <div className="absolute inset-0" style={{ backgroundImage: paperTexture(id, wear) }} />
-      {isFolded(wear) && (
-        <div
-          className={`absolute top-0 h-7 w-7 ${marksOf(id).foldRight ? "right-0" : "left-0"}`}
-          style={{
-            background: `linear-gradient(${marksOf(id).foldRight ? 225 : 135}deg, var(--color-paper) 48%, rgba(32,30,29,0.07) 50%, transparent 60%)`,
-          }}
-        />
-      )}
+      {isFolded(wear) && <div className={`absolute top-0 h-7 w-7 ${foldsRight(id) ? "right-0" : "left-0"}`} style={foldStyle(id)} />}
     </div>
   );
 }
@@ -64,14 +73,19 @@ export function PostBody({ form, body, imageIds }: { form: Form; body: string; i
   );
 }
 
-function Meta({ name, at }: { name: string; at: string }) {
+function Meta({ name, at, trailing }: { name: string; at: string; trailing?: ReactNode }) {
   const t = new Date(at);
+  const today = new Date();
+  const sameDay = t.toDateString() === today.toDateString();
+  const hhmm = `${`${t.getHours()}`.padStart(2, "0")}:${`${t.getMinutes()}`.padStart(2, "0")}`;
   return (
     <div className="flex items-baseline gap-3 text-xs text-ink-soft">
       <span className="text-ink">{name}</span>
+      {/* 今日の紙は時刻だけ。前の日の紙は日付も添える（「3分前」のような相対表記は使わない） */}
       <time dateTime={at} className="tracking-[0.12em]">
-        {`${t.getHours()}`.padStart(2, "0")}:{`${t.getMinutes()}`.padStart(2, "0")}
+        {sameDay ? hhmm : `${t.getMonth() + 1}月${t.getDate()}日　${hhmm}`}
       </time>
+      {trailing}
     </div>
   );
 }
@@ -92,6 +106,7 @@ export function PostCard({
   const [revealed, setRevealed] = useState<{ body: string; imageIds: string[] } | null>(null);
   const [reacted, setReacted] = useState(post.reacted);
   const [loading, setLoading] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const router = useRouter();
   // preopened は一覧側で「未確認も開いて見る」を押したときに渡ってくる本文。
   // 自分で伏せた紙にはどちらも使わない（伏せたのに開いたまま残らないように）。
@@ -137,12 +152,55 @@ export function PostCard({
     }
     setLoading(false);
   }
+  /** 自分の紙を、いま他の人から引き取る（じぶんの箱には残る）。 */
+  async function pullBack() {
+    setLoading(true);
+    setMenuOpen(false);
+    const r = await fetch(`/api/posts/${post.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ expireNow: true }),
+    });
+    if (r.ok) router.refresh();
+    setLoading(false);
+  }
   async function unveilForMe() {
     setLoading(true);
     const r = await fetch(`/api/posts/${post.id}/veil`, { method: "DELETE" });
     if (r.ok) router.refresh();
     setLoading(false);
   }
+
+  // 紙の右上の「…」。ブロックや通報は置かない（デザイン案 1g の注記どおり）。
+  const menu = (
+    <span className="relative ml-auto -mr-2 -mt-2">
+      <button
+        type="button"
+        onClick={() => setMenuOpen(!menuOpen)}
+        aria-label="この紙について"
+        aria-expanded={menuOpen}
+        className="label flex size-8 items-center justify-center rounded-full text-sm text-ink-faint"
+      >
+        …
+      </button>
+      {menuOpen && (
+        <>
+          <button type="button" aria-hidden tabIndex={-1} onClick={() => setMenuOpen(false)} className="fixed inset-0 z-10 cursor-default" />
+          <span className="absolute right-0 top-9 z-20 block w-max rounded-[28px] bg-card p-2.5 text-sm tracking-[0.06em] shadow-lift">
+            {post.mine ? (
+              <button type="button" onClick={pullBack} disabled={loading} className="block w-full rounded-[20px] px-[18px] py-[15px] text-left">
+                いま引き取る
+              </button>
+            ) : (
+              <button type="button" onClick={veilForMe} disabled={loading} className="block w-full rounded-[20px] px-[18px] py-[15px] text-left">
+                この紙をしまう
+              </button>
+            )}
+          </span>
+        </>
+      )}
+    </span>
+  );
 
   // 伏せた理由の文言。種類ごとに言い方を変える（書いた人の落ち度にしない）。
   const reasonText = !post.veiled
@@ -160,7 +218,7 @@ export function PostCard({
       <article id={`post-${post.id}`} className="relative overflow-hidden rounded-[26px] bg-veil px-[22px] pb-4 pt-5">
         <Wearing id={post.id} wear={wear} />
         <div className="relative">
-          <Meta name={post.authorName} at={post.createdAt} />
+          <Meta name={post.authorName} at={post.createdAt} trailing={post.veiled && post.kind === "unconfirmed" ? undefined : menu} />
           {/* 紙全体がタップ領域。右下の「ひらく」は目安 */}
           <button onClick={reveal} disabled={loading} className="mt-3 block w-full text-left">
             {post.images.length > 0 ? (
@@ -168,9 +226,9 @@ export function PostCard({
                 {post.images.map((img, i) => <Blurhash key={i} hash={img.blurhash} width={img.width} height={img.height} />)}
               </div>
             ) : (
-              <div className="relative h-[72px] overflow-hidden rounded-[20px] bg-line">
-                <div className="absolute inset-x-0 top-1/2 h-px bg-card/75" />
-                <div className="ruled absolute inset-y-[18px] inset-x-[22px]" />
+              <div className={`relative overflow-hidden rounded-[20px] bg-slot ${post.veiled && post.kind === "unconfirmed" ? "h-[44px]" : "h-[72px]"}`}>
+                <div className="absolute inset-x-0 top-1/2 h-px bg-slot-rule" />
+                <div className={`ruled absolute inset-x-[22px] ${post.veiled && post.kind === "unconfirmed" ? "inset-y-4" : "inset-y-[18px]"}`} />
               </div>
             )}
             <span className="mt-3 flex items-center gap-2.5">
@@ -192,11 +250,24 @@ export function PostCard({
     <article id={`post-${post.id}`} className="relative overflow-hidden rounded-[26px] bg-card px-[22px] pb-4 pt-5 shadow-paper">
       <Wearing id={post.id} wear={wear} />
       <div className="relative">
-        <Meta name={post.authorName} at={post.createdAt} />
-        {post.veiled && post.kind === "cw" && (
-          <p className="label mt-3 text-[11px] leading-[1.8] tracking-[0.06em] text-ink-faint">書いた人が先に断っています　{post.reason}</p>
-        )}
+        <Meta name={post.authorName} at={post.createdAt} trailing={menu} />
         <PostBody form={form} body={opened.body} imageIds={opened.imageIds} />
+        {post.veiled && (
+          // 開けた紙は、伏せてあったことを一行残してまた伏せられる（デザイン案 1g）
+          <div className="mt-3 flex items-center gap-2.5">
+            <span className="label text-[11px] leading-[1.8] tracking-[0.06em] text-ink-soft">
+              {post.kind === "cw" ? `書いた人が先に断っています　${post.reason}` : "伏せてあった紙を開いています"}
+            </span>
+            <button
+              type="button"
+              onClick={veilForMe}
+              disabled={loading}
+              className="label ml-auto shrink-0 rounded-full bg-veil px-4 py-[9px] text-[11px] tracking-[0.14em] text-ink-soft"
+            >
+              また伏せる
+            </button>
+          </div>
+        )}
         {similarId && (
           <button type="button" onClick={goToSimilar} className="label mt-3 block text-[11px] tracking-[0.08em] text-ink-faint underline underline-offset-4">
             近いことを書いた人がいます
@@ -208,9 +279,6 @@ export function PostCard({
           ))}
           {!post.mine && (
             <>
-              <button onClick={veilForMe} disabled={loading} className="label text-[11px] tracking-[0.08em] text-ink-faint underline underline-offset-4">
-                これは伏せておく
-              </button>
               <button
                 onClick={react}
                 aria-pressed={reacted}
