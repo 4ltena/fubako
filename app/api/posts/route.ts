@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { done, requireUser } from "@/lib/api";
 import { prisma } from "@/lib/db";
+import { inferForm } from "@/lib/form";
 import { ACCEPTED_TYPES, processImage } from "@/lib/image";
 import { deleteObject, putObject } from "@/lib/storage";
 import { isMember, timelineFor } from "@/lib/timeline";
@@ -90,7 +91,8 @@ export async function POST(req: Request) {
   }
 
   const post = await prisma.post.create({
-    data: { circleId, authorId: userId, body, cw, tags: parseTags(b.tags ?? ""), expiresAt },
+    // 形は書き手に選ばせず本文と画像から決める（原則 A）。
+    data: { circleId, authorId: userId, body, cw, tags: parseTags(b.tags ?? ""), expiresAt, form: inferForm(body, files.length) },
   });
   const uploadedKeys: string[] = [];
   try {

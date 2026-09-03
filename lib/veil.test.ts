@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { TimelinePost } from "./timeline";
 import { UNCONFIRMED, veilFor } from "./veil";
 
 describe("veilFor", () => {
@@ -42,5 +43,15 @@ describe("注意文（cw）", () => {
     expect(veilFor(["推し"], ["ネタバレ"], "")).toEqual({ veiled: false });
     expect(veilFor(["推し"], ["ネタバレ"], null)).toEqual({ veiled: false });
     expect(veilFor([], ["ネタバレ"], null)).toEqual({ veiled: true, reason: UNCONFIRMED });
+  });
+});
+
+describe("伏せた投稿が持たないもの", () => {
+  it("伏せた投稿は form を持たない（形から本文が推測できるため）", () => {
+    // TimelinePost の veiled: true 側に form が無いことを型で固定する。
+    const veiled = { veiled: true, reason: "ネタバレ" } as Extract<TimelinePost, { veiled: true }>;
+    expect("form" in veiled).toBe(false);
+    // @ts-expect-error 伏せた投稿に form は無い
+    expect(veiled.form).toBeUndefined();
   });
 });

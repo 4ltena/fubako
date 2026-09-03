@@ -1,7 +1,8 @@
 import { ActionButton } from "@/components/ActionButton";
-import { ImageGrid } from "@/components/PostCard";
+import { PostBody } from "@/components/PostCard";
 import { currentUserId } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import type { Form } from "@/lib/form";
 
 function isExpired(d: Date) {
   return d.getTime() <= Date.now();
@@ -27,8 +28,7 @@ export default async function ArchivePage() {
               <span className="ml-auto">{isExpired(p.expiresAt) ? "期限切れ" : "公開中"}</span>
             </div>
             {p.cw && <p className="mt-2 text-xs text-ink-soft">注意文: {p.cw}</p>}
-            <p className="mt-2 whitespace-pre-wrap">{p.body}</p>
-            <ImageGrid ids={p.images.map((i) => i.id)} />
+            <PostBody form={p.form as Form} body={p.body} imageIds={p.images.map((i) => i.id)} />
             {p.tags.length > 0 && <p className="mt-1 text-xs text-ink-soft">{p.tags.map((t) => `#${t}`).join(" ")}</p>}
             <div className="mt-2 flex gap-3 text-xs">
               {!isExpired(p.expiresAt) && (

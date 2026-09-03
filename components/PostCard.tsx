@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { Blurhash } from "@/components/Blurhash";
+import type { Form } from "@/lib/form";
 import type { TimelinePost } from "@/lib/timeline";
 
 export function ImageGrid({ ids }: { ids: string[] }) {
@@ -19,8 +20,31 @@ export function ImageGrid({ ids }: { ids: string[] }) {
   );
 }
 
+/**
+ * 本文と画像の見せ方。形（lib/form.ts）ごとに分かれるのはここだけで、
+ * タイムラインもアーカイブもこれを使う（ページ側に分岐を複製しない）。
+ */
+export function PostBody({ form, body, imageIds }: { form: Form; body: string; imageIds: string[] }) {
+  // 一枚: 画像だけを置き、本文欄は出さない
+  if (form === "picture") return <ImageGrid ids={imageIds} />;
+  const className =
+    form === "sentence"
+      ? "mt-2 text-lg" // 一文: やや大きく1行で
+      : form === "verse"
+        ? "mt-2 whitespace-pre-wrap text-center leading-loose" // 一句: 中央揃え・行間広め
+        : "mt-2 whitespace-pre-wrap";
+  return (
+    <>
+      <p className={className}>{body}</p>
+      <ImageGrid ids={imageIds} />
+    </>
+  );
+}
+
 export function PostCard({ post }: { post: TimelinePost }) {
   const [opened, setOpened] = useState<{ body: string; imageIds: string[] } | null>(post.veiled ? null : { body: post.body, imageIds: post.imageIds });
+  // 伏せた投稿は form を持たない。開いたあとも形は使わず通常表示にする。
+  const form: Form = post.veiled ? "text" : post.form;
   const [reacted, setReacted] = useState(post.reacted);
   const [loading, setLoading] = useState(false);
 
@@ -52,10 +76,7 @@ export function PostCard({ post }: { post: TimelinePost }) {
           <span className="block px-3 py-4">伏せています（{post.veiled ? post.reason : ""}）。タップで開く</span>
         </button>
       ) : (
-        <>
-          <p className="mt-2 whitespace-pre-wrap">{opened.body}</p>
-          <ImageGrid ids={opened.imageIds} />
-        </>
+        <PostBody form={form} body={opened.body} imageIds={opened.imageIds} />
       )}
       <div className="mt-2 flex items-center gap-2 text-xs text-ink-soft">
         {post.tags.map((t) => <span key={t}>#{t}</span>)}

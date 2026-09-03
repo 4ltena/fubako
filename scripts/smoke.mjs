@@ -86,6 +86,26 @@ tooBig.set("circleId", circle.id);
 tooBig.set("body", "大きすぎ");
 tooBig.append("images", new Blob([Buffer.alloc(4.5 * 1024 * 1024)], { type: "image/png" }), "big.png");
 assert((await A("/api/posts", { method: "POST", body: tooBig, headers: { "content-type": undefined } })).status === 413, "4MB 超は 413");
+// 今日の気配（人単位で見せない）
+const beforePage = await (await B("/c/" + circle.id)).text();
+assert(!beforePage.includes("今日、この場に来た人がいます"), "自分しか来ていない日は気配を出さない");
+await A("/c/" + circle.id); // A が場に来る
+const afterPage = await (await B("/c/" + circle.id)).text();
+const line = afterPage.match(/>([^<>]*この場に来た[^<>]*)</);
+assert(line && line[1] === "今日、この場に来た人がいます", "今日来た人がいれば1行だけ出る（名前も数字も混ぜない）");
+assert(!/lastSeenAt/.test(JSON.stringify((await (await B("/api/posts?circleId=" + circle.id)).json()))), "lastSeenAt は API に出ない");
+
+// 投稿の形（書き手に選ばせず自動で決める）
+const mk = async (body, tags) => (await (await A("/api/posts", { method: "POST", body: JSON.stringify({ circleId: circle.id, body, tags }) })).json());
+const f1 = await mk("配信の最後に手を振った", "推し");
+const f2 = await mk(["夜が明ける", "推しの声", "まだ耳に"].join("\n"), "推し");
+const f3 = await mk("あ".repeat(41), "推し");
+const fv = await mk("形を持たない本文", "ネタバレ");
+tl = (await (await B("/api/posts?circleId=" + circle.id)).json()).posts;
+const formById = Object.fromEntries(tl.map((p) => [p.id, p]));
+assert(formById[f1.id].form === "sentence" && formById[f2.id].form === "verse" && formById[f3.id].form === "text", "形が本文から自動で決まる");
+assert(formById[fv.id].veiled && !("form" in formById[fv.id]), "伏せた投稿は形を持たない");
+
 assert((await fetch(BASE + "/api/cron/digest")).status === 401, "cron は秘密なしで 401");
 const page = await (await B("/c/" + circle.id)).text();
 assert(page.includes("noindex") && !page.includes("og:") && !page.includes("ネタバレ本文") && !page.includes("タグなし本文") && page.includes("無害本文"), "画面 HTML にも伏せた本文が無く noindex");
