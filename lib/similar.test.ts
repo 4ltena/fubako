@@ -85,8 +85,8 @@ describe("pickSimilar", () => {
   });
 });
 
-describe("MeCab が無い環境", () => {
-  it("extractTerms は空配列を返し、例外を投げない（投稿は通る）", async () => {
-    await expect(extractTerms("推しの新曲が良かった", ["前の投稿"], { bin: "fubako-no-such-mecab" })).resolves.toEqual([]);
+describe("extractTerms", () => {
+  it("空文字では空配列を返し、例外を投げない（投稿は通る）", async () => {
+    await expect(extractTerms("", ["前の投稿"])).resolves.toEqual([]);
   });
 });

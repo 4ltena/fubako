@@ -77,7 +77,7 @@
 | DB | PostgreSQL + Prisma |
 | 認証 | Auth.js v5（Discord OAuth ＋ メールのマジックリンク） |
 | タグ自動推定（Phase 5） | Anthropic API（サーバ側からのみ呼ぶ） |
-| 形態素解析 | MeCab（ipadic-utf8。子プロセスで呼ぶ。無ければ機能が黙って止まる） |
+| 形態素解析 | kuromoji.js（純粋 JS、ipadic 同梱。Vercel の関数内でも動く） |
 | ダイジェスト | Vercel Cron、または node-cron（`npm run cron`、21:00 JST） |
 | ホスティング | Vercel + Neon、または Docker（Render / Fly.io / VPS） |
 
@@ -124,7 +124,35 @@ EMAIL_FROM=
 CRON_SECRET=            # ダイジェストcronの認証用
 ANTHROPIC_API_KEY=      # Phase 5以降のみ
 BLOB_READ_WRITE_TOKEN=  # 未設定ならローカル保存
+PASSWORD_LOGIN=         # 1 にすると名前+パスワードでログインできる（発表用の入口。テスト用）
 ```
+
+---
+
+## Vercel に置く
+
+1. [Neon](https://neon.tech) で Postgres を作り、接続文字列を控える
+2. Vercel にリポジトリを接続する
+3. Vercel の環境変数に以下を設定する
+
+   ```
+   DATABASE_URL=            # Neon の接続文字列
+   AUTH_SECRET=              # npx auth secret で生成
+   BLOB_READ_WRITE_TOKEN=    # Vercel Blob を作ると自動で入る
+   CRON_SECRET=              # ダイジェストcronの認証用。ランダムな値
+   APP_URL=                  # デプロイ後の URL
+   PASSWORD_LOGIN=1          # 発表で環境構築なしに入ってもらうための入口
+   AUTH_DISCORD_ID=          # 任意
+   AUTH_DISCORD_SECRET=      # 任意
+   EMAIL_SERVER=             # 任意（マジックリンク用SMTP）
+   EMAIL_FROM=               # 任意
+   ```
+
+4. デプロイする。`vercel.json` の `buildCommand`（`npx prisma migrate deploy && next build`）が Vercel のビルドのたびにマイグレーションを自動で適用する。cron 設定はそのまま使う
+
+Docker（Render / Fly.io / VPS）で動かす場合はイメージビルド時に `DATABASE_URL` が無いため、マイグレーションはビルドに含めていない。デプロイ前に `npx prisma migrate deploy` を実行してから `npm start` すること。
+
+発表が終わったら `PASSWORD_LOGIN` を外す（このログイン経路はパスワード再設定・レート制限を持たないテスト用の入口のため）。
 
 ---
 
@@ -160,12 +188,12 @@ lib/
   draft.ts                   書きかけを端末に24時間だけ残す
   wear.ts                    紙のいたみ。寿命の残りを数字にしない
   form.ts                    投稿の形（一文・一枚・一句）の自動判定
-  morph.ts                   MeCab の呼び出しとパース。サーバ側のみ
+  morph.ts                   kuromoji の呼び出しとパース。サーバ側のみ
   similar.ts                 近い投稿の突き合わせ。terms は外に出さない
 scripts/
   smoke.mjs                  起動中サーバに対する通しテスト
   seed.mjs                   開発用の仮データ（SMTP 無しで画面を触るためのセッション付き）
-  verify-mecab.mjs           コンテナ内で形態素解析が動くかだけを確かめる
+  verify-tokenizer.mjs       形態素解析が動くかだけを確かめる
   backfill-terms.mjs         既存投稿に terms を後から入れる
   cron.mjs                   Vercel 以外でダイジェストを回す
 prisma/
@@ -174,11 +202,10 @@ prisma/
 
 `lib/veil.ts` と `lib/visibility.ts` は必ずユニットテストを書く。ここが壊れると製品の約束が壊れる。
 
-MeCab はローカルに無くてよい。無いときは `terms` が空になり「近いことを書いた人がいます」が出ないだけで、投稿も表示も通る。実際に動かすなら Docker を使う。
+形態素解析は kuromoji.js（純粋 JS）なので追加のインストールは要らない。動作確認だけ単独で行うなら:
 
 ```bash
-docker build -t fubako .
-docker run --rm fubako node scripts/verify-mecab.mjs   # 名詞と形容詞が返るか
+node scripts/verify-tokenizer.mjs   # 名詞と形容詞が返るか
 ```
 
 ---
@@ -203,6 +230,6 @@ docker run --rm fubako node scripts/verify-mecab.mjs   # 名詞と形容詞が�
 
 ## 未決事項
 
-- サークルの人数上限（暫定30人。Pathの50人が参考）
+- サークルの人数上限（暫定30人。Pathの50人が参考。発表など大人数で使うときは `CIRCLE_MEMBER_LIMIT` で新しい箱の定員だけ上げる）
 - 寿命の既定値（暫定7日、未検証）
 - 名前（「ふばこ」は仮）

@@ -1,23 +1,22 @@
 /**
- * 形態素解析。MeCab（https://taku910.github.io/mecab/）だけを使う。
+ * 形態素解析。kuromoji.js（純粋 JS、ipadic 同梱）を使う。
  *
- * 呼び出しは子プロセス（`mecab` コマンド）。バインディング（mecab-async 等）は
- * ネイティブビルドが Node のバージョンに追随せず、`npm ci` が壊れる事故のほうが
- * 高くつくので採らない。子プロセスなら Docker イメージに `mecab` があれば動く。
+ * MeCab の子プロセス呼び出しは廃止した。Vercel の関数はネイティブバイナリを
+ * 常駐させられないため、Node だけで完結する kuromoji に置き換えている。
+ * ユーザー辞書は持たない。サークルのタグの語は本文との文字列一致で拾う
+ * （`TokenizeOptions.terms`）。
  *
- * 出力フォーマットは mecabrc に依存しないよう -F / -U / -E で固定する
- * （-Ochasen は mecabrc 側の定義が要るため使わない）。パースは morph.test.ts で守る。
+ * トークナイザは module scope で1度だけ構築し、以後は使い回す（辞書の読み込みは重い）。
+ * 構築に失敗した場合や解析中に例外が起きた場合は、今までどおり例外を投げず
+ * 空配列を返し、`console.warn` に `{ event: "tokenizer_unavailable", reason }` を出す。
  *
- * MeCab が無い環境（ローカル開発など）では例外を投げず空配列を返す。
- * 呼び出し側は「近い投稿の行が出ないだけ」で投稿は通す。
+ * kuromoji のトークン（surface_form/pos/pos_detail_1/basic_form）は、既存の
+ * 4列タブ形式（表層形・品詞・細分類1・原形。原形が `*` なら表層形）に整形して
+ * parseMecab に通す。分類ロジックを二重に持たないため。
  *
- * サーバ側専用。辞書もバイナリもクライアントには送らない。
+ * サーバ側専用。辞書もモデルもクライアントには送らない。
  */
-import { spawn } from "node:child_process";
-import { createHash } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
-import { tmpdir } from "node:os";
+import kuromoji from "kuromoji";
 import { join } from "node:path";
 
 /** 語の種類。固有名詞（キャラ名・作品名）を最も重く扱う。 */
@@ -25,44 +24,21 @@ export type Kind = "proper" | "noun" | "emotion";
 export type Token = { word: string; kind: Kind };
 
 export type TokenizeOptions = {
-  /** `mecab` の実行ファイル。既定は MECAB_BIN か "mecab"。 */
-  bin?: string;
-  /** userDictFrom が作ったユーザー辞書のパス。 */
-  userDict?: string | null;
-  /** これを超えたら諦めて空配列を返す。 */
-  timeoutMs?: number;
+  /** サークルのタグなど。本文に文字列として含まれていれば proper として先頭に足す。 */
+  terms?: string[];
 };
 
-export const DEFAULT_TIMEOUT_MS = 5000;
-/** ipadic-utf8 の辞書。Debian 系の既定位置。環境で変えられる。 */
-export const DICDIR = process.env.MECAB_DICDIR ?? "/var/lib/mecab/dic/ipadic-utf8";
-/** ユーザー辞書に入れる語のコスト。小さいほど1語として切り出されやすい。暫定値。 */
-export const USER_DICT_COST = 1000;
-/** ユーザー辞書に入れるタグ数の上限。 */
-export const USER_DICT_MAX_WORDS = 500;
-
-/** ipadic の素性: 品詞,細分類1,細分類2,細分類3,活用型,活用形,原形,読み,発音 */
-const FORMAT_ARGS = [
-  "-F",
-  "%m\t%f[0]\t%f[1]\t%f[6]\n",
-  // 未知語は原形（%f[6]）が * になるので表層形をそのまま原形として使う
-  "-U",
-  "%m\t%f[0]\t%f[1]\t%m\n",
-  "-E",
-  "EOS\n",
-];
+/** ipadic 辞書のパス。kuromoji 同梱のもの。 */
+const DIC_PATH = join("node_modules", "kuromoji", "dict");
 
 /** 感情語として拾っても意味の薄い動詞。 */
 const WEAK_VERBS = new Set(["する", "居る", "有る", "成る", "遣る", "為る", "いる", "ある", "なる", "やる", "できる", "ゆく"]);
-
-/** タグ集合ごとのユーザー辞書。null は「作れなかった」。 */
-const dictCache = new Map<string, string | null>();
 
 let warned = false;
 function warnUnavailable(reason: string): void {
   if (warned) return;
   warned = true;
-  console.warn(JSON.stringify({ event: "mecab_unavailable", reason }));
+  console.warn(JSON.stringify({ event: "tokenizer_unavailable", reason }));
 }
 
 function classify(pos: string, sub1: string): Kind | null {
@@ -85,7 +61,7 @@ function isNoise(word: string): boolean {
   return false;
 }
 
-/** MeCab の出力（FORMAT_ARGS で固定した4列）を語に直す。 */
+/** 4列タブ形式（表層形・品詞・細分類1・原形）の出力を語に直す。 */
 export function parseMecab(out: string): Token[] {
   const tokens: Token[] = [];
   for (const line of out.split("\n")) {
@@ -102,108 +78,56 @@ export function parseMecab(out: string): Token[] {
   return tokens;
 }
 
-function runMecab(input: string, args: string[], bin: string, timeoutMs: number): Promise<string | null> {
+type KuromojiTokenizer = { tokenize(text: string): kuromoji.IpadicFeatures[] };
+
+let tokenizerPromise: Promise<KuromojiTokenizer | null> | null = null;
+
+function buildTokenizer(): Promise<KuromojiTokenizer | null> {
   return new Promise((resolve) => {
-    let settled = false;
-    const finish = (value: string | null) => {
-      if (settled) return;
-      settled = true;
-      resolve(value);
-    };
-    let child;
-    try {
-      child = spawn(bin, args, { stdio: ["pipe", "pipe", "pipe"] });
-    } catch (e) {
-      warnUnavailable(String(e));
-      return finish(null);
-    }
-    const chunks: Buffer[] = [];
-    let stderr = "";
-    const timer = setTimeout(() => {
-      child.kill("SIGKILL");
-      warnUnavailable("timeout");
-      finish(null);
-    }, timeoutMs);
-    child.stdout.on("data", (c: Buffer) => chunks.push(c));
-    child.stderr.on("data", (c: Buffer) => (stderr += c.toString("utf8")));
-    // 起動に失敗すると stdin.end() が EPIPE を投げる。プロセスごと落とさない。
-    child.stdin.on("error", () => {});
-    child.on("error", (e) => {
-      clearTimeout(timer);
-      warnUnavailable(String(e));
-      finish(null);
-    });
-    child.on("close", (code) => {
-      clearTimeout(timer);
-      if (code !== 0) {
-        warnUnavailable(stderr.trim() || `exit ${code}`);
-        return finish(null);
+    kuromoji.builder({ dicPath: DIC_PATH }).build((err, tokenizer) => {
+      if (err) {
+        warnUnavailable(String(err));
+        resolve(null);
+        return;
       }
-      finish(Buffer.concat(chunks).toString("utf8"));
+      resolve(tokenizer);
     });
-    // 改行とタブは全角空白に寄せる。改行で文を切らず、タブは出力の列区切りと衝突する。
-    child.stdin.end(`${input.replace(/[\r\n\t]/g, "　")}\n`, "utf8");
   });
 }
 
-/** 本文を語に分ける。MeCab が無ければ空配列（例外は投げない）。 */
+function getTokenizer(): Promise<KuromojiTokenizer | null> {
+  if (!tokenizerPromise) tokenizerPromise = buildTokenizer();
+  return tokenizerPromise;
+}
+
+/** kuromoji のトークンを既存の4列タブ形式に整形する。 */
+function formatTokens(tokens: kuromoji.IpadicFeatures[]): string {
+  return (
+    tokens.map((t) => `${t.surface_form}\t${t.pos}\t${t.pos_detail_1}\t${t.basic_form}\n`).join("") + "EOS\n"
+  );
+}
+
+/** タグの語が本文に文字列として含まれていれば proper として先頭に足す（重複除く）。 */
+function withTerms(tokens: Token[], body: string, terms: string[] | undefined): Token[] {
+  if (!terms || terms.length === 0) return tokens;
+  const found = terms.filter((t) => t.length > 0 && body.includes(t));
+  if (found.length === 0) return tokens;
+  const words = new Set(tokens.map((t) => t.word));
+  const extra = [...new Set(found)].filter((w) => !words.has(w)).map((word): Token => ({ word, kind: "proper" }));
+  return [...extra, ...tokens];
+}
+
+/** 本文を語に分ける。kuromoji が使えなければ空配列（例外は投げない）。 */
 export async function tokenize(text: string, options: TokenizeOptions = {}): Promise<Token[]> {
   const body = text.trim();
   if (body.length === 0) return [];
-  const args = [...FORMAT_ARGS];
-  if (options.userDict) args.push("-u", options.userDict);
-  const out = await runMecab(body, args, options.bin ?? process.env.MECAB_BIN ?? "mecab", options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
-  return out === null ? [] : parseMecab(out);
-}
-
-/**
- * サークルのタグからユーザー辞書の CSV を作る。
- * ipadic の CSV は 表層形,左文脈ID,右文脈ID,コスト,品詞,細分類1..3,活用型,活用形,原形,読み,発音。
- * 文脈 ID を -1 にすると mecab-dict-index が推定する。
- */
-export function userDictCsv(tags: readonly string[]): string {
-  const words = [...new Set(tags.map((t) => t.replace(/[,"\r\n\t]/g, "").trim()).filter((t) => t.length > 0 && t.length <= 30))].slice(0, USER_DICT_MAX_WORDS);
-  return words.map((w) => `${w},-1,-1,${USER_DICT_COST},名詞,固有名詞,一般,*,*,*,${w},*,*`).join("\n");
-}
-
-/**
- * タグを固有名詞として登録したユーザー辞書を作り、そのパスを返す。
- * mecab-dict-index が無ければ null（ユーザー辞書なしで解析する）。
- * 同じタグ集合なら作り直さない。
- */
-export async function userDictFrom(tags: readonly string[], options: { bin?: string; dicdir?: string } = {}): Promise<string | null> {
-  const csv = userDictCsv(tags);
-  if (csv.length === 0) return null;
-  const hash = createHash("sha1").update(csv).digest("hex").slice(0, 16);
-  // 作れなかった場合も覚えておく。投稿のたびに mecab-dict-index を起こし直さない。
-  const cached = dictCache.get(hash);
-  if (cached !== undefined) return cached;
-  const out = join(tmpdir(), `fubako-userdic-${hash}.dic`);
-  if (existsSync(out)) {
-    dictCache.set(hash, out);
-    return out;
-  }
-  // 辞書が作れなくても投稿は止めない。失敗はすべて「ユーザー辞書なし」に倒す。
-  let dir: string;
+  const tokenizer = await getTokenizer();
+  if (tokenizer === null) return [];
   try {
-    dir = await mkdtemp(join(tmpdir(), "fubako-dict-"));
+    const tokens = parseMecab(formatTokens(tokenizer.tokenize(body)));
+    return withTerms(tokens, body, options.terms);
   } catch (e) {
     warnUnavailable(String(e));
-    dictCache.set(hash, null);
-    return null;
+    return [];
   }
-  const csvPath = join(dir, "user.csv");
-  let result: string | null = null;
-  try {
-    await writeFile(csvPath, `${csv}\n`, "utf8");
-    const args = ["-d", options.dicdir ?? DICDIR, "-u", out, "-f", "utf-8", "-t", "utf-8", csvPath];
-    const ok = await runMecab("", args, options.bin ?? process.env.MECAB_DICT_INDEX ?? "mecab-dict-index", DEFAULT_TIMEOUT_MS);
-    result = ok === null ? null : out;
-  } catch (e) {
-    warnUnavailable(String(e));
-  } finally {
-    await rm(dir, { recursive: true, force: true }).catch(() => {});
-  }
-  dictCache.set(hash, result);
-  return result;
 }
