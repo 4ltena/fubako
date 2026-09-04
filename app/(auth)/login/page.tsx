@@ -7,6 +7,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const stale = sp.dev === "stale";
   const passwordWrong = sp.password === "wrong";
   const discordEnabled = Boolean(process.env.AUTH_DISCORD_ID);
+  const emailEnabled = Boolean(process.env.EMAIL_SERVER);
   const passwordLoginEnabled = process.env.PASSWORD_LOGIN === "1";
   return (
     <main className="mx-auto w-full max-w-md flex-1 px-5 pt-16">
@@ -27,6 +28,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
             <button className="label w-full rounded-full bg-ink py-3.5 text-xs tracking-[0.1em] text-paper">Discord で入る</button>
           </form>
         )}
+        {emailEnabled && (
         <form
           className="space-y-3"
           action={async (fd: FormData) => {
@@ -37,6 +39,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           <input name="email" type="email" required placeholder="メールアドレス" className="w-full border-b border-line bg-transparent px-1 py-3 text-[15px] placeholder:text-ink-faint focus:outline-none" />
           <button className="label w-full rounded-full border border-line-2 py-3.5 text-xs tracking-[0.1em] text-ink-dim">入るためのリンクを送る</button>
         </form>
+        )}
       </div>
     </main>
   );

@@ -8,12 +8,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
   session: { strategy: "database" },
   trustHost: true,
+  // 環境変数が無い入口は組み込まない。空文字のまま渡すと Nodemailer がビルド時に AuthError を投げる
   providers: [
-    Discord,
-    Nodemailer({
-      server: process.env.EMAIL_SERVER,
-      from: process.env.EMAIL_FROM,
-    }),
+    ...(process.env.AUTH_DISCORD_ID ? [Discord] : []),
+    ...(process.env.EMAIL_SERVER
+      ? [Nodemailer({ server: process.env.EMAIL_SERVER, from: process.env.EMAIL_FROM })]
+      : []),
   ],
   pages: { signIn: "/login" },
 });
