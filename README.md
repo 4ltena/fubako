@@ -156,6 +156,11 @@ Docker（Render / Fly.io / VPS）で動かす場合はイメージビルド時�
 
 ---
 
+### 速さ
+
+- 関数は `vercel.json` の `regions: ["sin1"]` で Neon と同じシンガポールに置く。DB との往復が数 ms になる
+- 発表など人に触ってもらう時間帯は、手元で `APP_URL=https://<公開URL> npm run warm` を回しておく。4 分おきに `/api/health` を叩き、関数のコールドスタートと Neon の自動停止（5 分無通信）を避ける。常時は回さない
+
 ## ディレクトリ
 
 ```
