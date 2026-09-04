@@ -1,15 +1,138 @@
 @import "tailwindcss";
 
+/* 配布されたデザイン（Organic）のトークンを、読みやすさで詰め直したもの。
+   面どうし・字と面の対比は lib のテストではなく scratchpad の計算で確かめてある
+   （紙/地・伏せた紙/地・へこみ・緑の帯・反応の地はすべて 1.2 以上、
+     本文と小さい字は 4.5 以上、プレースホルダは 3 以上）。
+   暗い側は下の @media で同じ変数を差し替える（Tailwind の色ユーティリティは
+   必ず var() 参照になるので、dark: を1つも書かずに全画面が入れ替わる）。 */
 @theme {
-  --color-paper: #f6f3ee;
-  --color-card: #fffdf9;
-  --color-ink: #2b2521;
-  --color-ink-soft: #6f655d;
-  --color-line: #e2dbd1;
-  --color-accent: #5b4a3f;
-  --color-veil: #ece6dd;
+  --color-paper: #e4d7c0;      /* 台紙（PC の外側） */
+  --color-screen: #ece0cb;     /* 画面の地 */
+  --color-card: #fdf9f3;       /* 紙 */
+  --color-veil: #d6c9b3;       /* 伏せた紙。地より沈める */
+  --color-line: #cfc4b1;       /* 罫 */
+  --color-edge: #d3c6b0;       /* 影を持たない面の縁 */
+  --color-slot: #bcae95;       /* 伏せた面のへこみ */
+  --color-slot-rule: #eee7dc;  /* へこみの中の横線 */
+  --color-ink: #201e1d;
+  --color-ink-soft: #544c42;
+  --color-ink-faint: #584f43;
+  --color-ink-pale: #948a78;   /* プレースホルダ */
+  --color-accent: #8c491a;
+  --color-accent-deep: #643312;
+  --color-accent-pale: #ffd0b3;/* 届いた状態の地 */
+  --color-sage: #c6d6a9;
+  --color-sage-fill: #a8ba8a;
+  --color-sage-ink: #3d472b;
+  --color-sage-deep: #2b3320;
+
+  --radius-paper: 26px;
+  --radius-sheet: 28px;
+
+  --font-serif: var(--font-noto-serif-jp), "Hiragino Mincho ProN", "Yu Mincho", serif;
+  --font-label: var(--font-zen-kaku), "Hiragino Sans", "Yu Gothic", sans-serif;
 }
 
+/* 影は @theme に置かない。Tailwind v4 は --shadow-* を組み立て時に展開するので、
+   @media で変数を差し替えても効かない。独自ユーティリティにして var() を残す。 */
+:root {
+  color-scheme: light dark;
+  --lift-paper: 0 1px 2px color-mix(in srgb, #2e2b25 14%, transparent);
+  --lift-high: 0 3px 10px color-mix(in srgb, #2e2b25 16%, transparent);
+  /* 紙の目・罫・いたみに使うインク。暗い紙では光を拾う側に反転する。 */
+  --texture-ink: 32 30 29;
+  --wear-crease: 32 30 29;
+  --wear-stain: 100 92 80;
+  --wear-gain: 1;
+}
+
+@utility shadow-paper {
+  box-shadow: var(--lift-paper);
+}
+@utility shadow-lift {
+  box-shadow: var(--lift-high);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-paper: #1f1913;
+    --color-screen: #2a231d;
+    --color-card: #3a3128;     /* 紙は地よりはっきり明るく */
+    --color-veil: #161009;     /* 伏せた紙は地より沈める */
+    --color-line: #4f483d;
+    --color-edge: #4a4238;
+    --color-slot: #332b22;     /* 暗い側ではへこみを「光の当たる面」として出す */
+    --color-slot-rule: #191309;
+    --color-ink: #f5ead8;
+    --color-ink-soft: #cdc3b2;
+    --color-ink-faint: #a89d8b;
+    --color-ink-pale: #857b6c;
+    --color-accent: #f6a06b;
+    --color-accent-deep: #ffc6a5;
+    --color-accent-pale: #6b3a1a;
+    --color-sage: #3d472b;
+    --color-sage-fill: #56633f;
+    --color-sage-ink: #ccdbb2;
+    --color-sage-deep: #e1eecc;
+    /* 暗い地では、影ではなく縁と沈む暗さで浮かせる（Organic の指示） */
+    --lift-paper: 0 0 0 1px rgba(245, 234, 216, 0.07), 0 1px 3px rgba(0, 0, 0, 0.55);
+    --lift-high: 0 0 0 1px rgba(245, 234, 216, 0.09), 0 8px 22px rgba(0, 0, 0, 0.6);
+    --texture-ink: 245 234 216;
+    --wear-crease: 245 234 216;
+    --wear-stain: 192 182 165;
+    /* 明るい色を暗い地へ重ねるほうが明度が速く動くので、濃さは落とす */
+    --wear-gain: 0.8;
+  }
+}
+
+/* 紙の目。薄い点を敷いて、平らな面にしない。 */
 body {
-  font-family: "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+  background-color: var(--color-screen);
+  background-image: radial-gradient(rgb(var(--texture-ink) / calc(0.045 * var(--wear-gain))) 1px, transparent 1px);
+  background-size: 4px 4px;
+  color: var(--color-ink);
+  font-family: var(--font-serif);
+  letter-spacing: 0.05em;
+}
+
+/* 小さい字は明朝だと沈むので、ラベルだけゴシックに逃がす。 */
+.label {
+  font-family: var(--font-label);
+  letter-spacing: 0.16em;
+}
+
+/* 伏せた紙の面。罫線だけが見えて、字は見えない。 */
+.ruled {
+  background-image: repeating-linear-gradient(0deg, transparent 0 25px, rgb(var(--texture-ink) / calc(0.09 * var(--wear-gain))) 25px 26px);
+}
+
+/* 下書き用の罫線（投稿画面）。 */
+.ruled-wide {
+  background-image: repeating-linear-gradient(0deg, transparent 0 35px, rgb(var(--texture-ink) / calc(0.07 * var(--wear-gain))) 35px 36px);
+}
+
+/* 写真は地に沈める（Organic の .washed）。伏せた紙の中はさらに沈める。 */
+.washed {
+  filter: saturate(0.6) contrast(0.85) brightness(1.06);
+}
+.washed-veiled {
+  filter: saturate(0.5) contrast(0.8) brightness(0.9) opacity(0.9);
+}
+@media (prefers-color-scheme: dark) {
+  .washed {
+    filter: saturate(0.55) contrast(0.82) brightness(0.62);
+  }
+  .washed-veiled {
+    filter: saturate(0.45) contrast(0.78) brightness(0.45) opacity(0.85);
+  }
+}
+
+/* 角は丸く、線はほとんど引かない。焦点も選択も既定の青にしない。 */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+::selection {
+  background: color-mix(in srgb, var(--color-accent) 30%, transparent);
 }

@@ -46,11 +46,19 @@
 
 **本文はサーバ側で落とす。** タイムラインAPIのレスポンスに本文を含めない。クライアントでCSSやJSで隠す実装にはしない。開くときに `/api/posts/:id/reveal` を別途叩く。
 
+書き手が注意文を付けた投稿は、地雷宣言の有無に関係なく全員に対して伏せられる。理由には注意文がそのまま出る。開いたあとも「書いた人が先に断っています」と残す。
+
+伏せそこねたときは、読み手がその紙を自分のためだけに閉じられる（「これは伏せておく」）。書き手には何も届かず、通報でもない。いつでも戻せる。語の宣言は「見たくない語」に置いたままで、こちらは触らない。
+
+画像も同じ判定に従う。伏せた状態ではサーバは blurhash と寸法だけを返し、画像本体は開いたあとに `/api/images/:id` が会員かつ可視のときだけ代理で返す。公開 URL は無い。アップロード時に EXIF は全て落とし、向きは画素に焼き込む。
+
 ### 2. 未タグは既定で伏せる
 
 書き手にタグ付けを強制しない。ただしタグのない投稿は、地雷宣言をしている読み手に対しては「未確認」として伏せられる。
 
 これでタグ付けの動機が生まれ、かつ判定漏れが安全側に倒れる。
+
+未確認の紙が並んで読めないときは、いま並んでいる分だけをまとめて開ける。設定としては残さないので、これから届く紙は伏せたまま届く。
 
 ### 3. 可視性の時間非対称
 
@@ -64,12 +72,14 @@
 
 | 層 | 採用 |
 |---|---|
-| フロント / サーバ | Next.js (App Router) + TypeScript + Tailwind CSS |
+| フロント / サーバ | Next.js (App Router) + TypeScript + Tailwind CSS v4 |
+| 見た目 | 配布デザイン（Organic）。明暗は OS/ブラウザ追従で、切り替えは作らない |
 | DB | PostgreSQL + Prisma |
 | 認証 | Auth.js v5（Discord OAuth ＋ メールのマジックリンク） |
 | タグ自動推定（Phase 5） | Anthropic API（サーバ側からのみ呼ぶ） |
-| ダイジェスト | Vercel Cron（1日1回） |
-| ホスティング | Vercel + Neon |
+| 形態素解析 | MeCab（ipadic-utf8。子プロセスで呼ぶ。無ければ機能が黙って止まる） |
+| ダイジェスト | Vercel Cron、または node-cron（`npm run cron`、21:00 JST） |
+| ホスティング | Vercel + Neon、または Docker（Render / Fly.io / VPS） |
 
 X API は使わない。相互フォローのグラフ取得に有料枠が必要になる可能性が高い。狭さは招待コードと人数上限で作る。
 
@@ -113,6 +123,7 @@ EMAIL_SERVER=           # マジックリンク用SMTP
 EMAIL_FROM=
 CRON_SECRET=            # ダイジェストcronの認証用
 ANTHROPIC_API_KEY=      # Phase 5以降のみ
+BLOB_READ_WRITE_TOKEN=  # 未設定ならローカル保存
 ```
 
 ---
@@ -132,6 +143,7 @@ app/
   api/
     circles/
     posts/
+    images/
     me/mutes/
     cron/digest/
 components/
@@ -140,14 +152,34 @@ lib/
   veil.ts                    伏せ判定。ここが製品の心臓
   visibility.ts              寿命と可視性の判定
   timeline.ts                タイムライン組み立て。伏せた投稿の本文をここで落とす
+  image.ts                   画像の再エンコードと blurhash
+  storage.ts                 Blob かローカルディスク
+  presence.ts                今日この場に来た人がいるか。真偽値だけ
+  tags.ts                    そのサークルでよく使われた語（件数は返さない）
+  invite.ts                  招待の言葉（ひらがな10文字）の生成と正規化
+  draft.ts                   書きかけを端末に24時間だけ残す
+  wear.ts                    紙のいたみ。寿命の残りを数字にしない
+  form.ts                    投稿の形（一文・一枚・一句）の自動判定
+  morph.ts                   MeCab の呼び出しとパース。サーバ側のみ
+  similar.ts                 近い投稿の突き合わせ。terms は外に出さない
 scripts/
   smoke.mjs                  起動中サーバに対する通しテスト
   seed.mjs                   開発用の仮データ（SMTP 無しで画面を触るためのセッション付き）
+  verify-mecab.mjs           コンテナ内で形態素解析が動くかだけを確かめる
+  backfill-terms.mjs         既存投稿に terms を後から入れる
+  cron.mjs                   Vercel 以外でダイジェストを回す
 prisma/
   schema.prisma
 ```
 
 `lib/veil.ts` と `lib/visibility.ts` は必ずユニットテストを書く。ここが壊れると製品の約束が壊れる。
+
+MeCab はローカルに無くてよい。無いときは `terms` が空になり「近いことを書いた人がいます」が出ないだけで、投稿も表示も通る。実際に動かすなら Docker を使う。
+
+```bash
+docker build -t fubako .
+docker run --rm fubako node scripts/verify-mecab.mjs   # 名詞と形容詞が返るか
+```
 
 ---
 
@@ -156,7 +188,7 @@ prisma/
 - `robots.txt` で全パスを Disallow
 - 全ページに `noindex, nofollow`
 - OGP メタタグを出さない（外部に本文を漏らさない）
-- サークルは招待コードなしでは存在自体が見えない
+- サークルは招待の言葉なしでは存在自体が見えない
 
 ---
 
@@ -173,5 +205,4 @@ prisma/
 
 - サークルの人数上限（暫定30人。Pathの50人が参考）
 - 寿命の既定値（暫定7日、未検証）
-- 画像を許すか（推し活の投稿はグッズ写真やスクショが中心なので落とすと痛い。ただし身バレと転載のリスクが上がり、タグ自動推定も難しくなる）
 - 名前（「ふばこ」は仮）

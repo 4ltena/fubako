@@ -1,20 +1,27 @@
 import { NextResponse } from "next/server";
-import { done, readBody, requireUser } from "@/lib/api";
+import { done, fail, readBody, requireUser } from "@/lib/api";
 import { prisma } from "@/lib/db";
+import { normalizeInvite } from "@/lib/invite";
 
 export async function POST(req: Request) {
   const userId = await requireUser();
   if (userId instanceof NextResponse) return userId;
-  const { inviteCode } = await readBody(req);
+  const b = await readBody(req);
+  // 打ち間違い以外の揺れ（カタカナ・空白）だけを均す。大小は潰さない
+  const inviteCode = normalizeInvite(b.inviteCode ?? "");
+  // form から来たときの戻り先。外に飛ばされないよう、自分の中のパスだけを許す
+  const asked = b.from ?? "/";
+  const from = asked.startsWith("/") && !asked.startsWith("//") && !asked.startsWith("/\\") ? asked : "/";
   const circle = await prisma.circle.findUnique({
-    where: { inviteCode: inviteCode ?? "" },
+    where: { inviteCode },
     include: { _count: { select: { memberships: true } } },
   });
-  // 存在しないコードと定員超過は同じ 404。コードの当たり外れを教えない。
-  if (!circle) return NextResponse.json({ error: "not found" }, { status: 404 });
+  // 存在しないコードと定員超過は同じ扱い。コードの当たり外れを教えない。
+  const miss = `${from}${from.includes("?") ? "&" : "?"}join=miss`;
+  if (!circle) return fail(req, miss, 404, { error: "not found" });
   const already = await prisma.membership.findUnique({ where: { userId_circleId: { userId, circleId: circle.id } } });
   if (!already) {
-    if (circle._count.memberships >= circle.memberLimit) return NextResponse.json({ error: "full" }, { status: 404 });
+    if (circle._count.memberships >= circle.memberLimit) return fail(req, miss, 404, { error: "not found" });
     // ponytail: 定員チェックとinsertが非原子。30人規模の競合は無視する
     await prisma.membership.create({ data: { userId, circleId: circle.id } });
   }

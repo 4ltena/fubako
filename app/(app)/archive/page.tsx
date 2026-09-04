@@ -1,40 +1,72 @@
 import { ActionButton } from "@/components/ActionButton";
+import { PostBody } from "@/components/PostCard";
 import { currentUserId } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import type { Form } from "@/lib/form";
+import { foldsRight, foldStyle, isFolded, marksOf, paperTexture, wearOf } from "@/lib/wear";
 
 function isExpired(d: Date) {
   return d.getTime() <= Date.now();
+}
+
+/** もどってきた紙はいたんだまま重なって残る。角度もいたみ方も一枚ずつ違う（lib/wear.ts）。 */
+function paperStyle(id: string, wear: number) {
+  return { transform: `rotate(${marksOf(id).tilt.toFixed(2)}deg)`, backgroundImage: paperTexture(id, wear) };
 }
 
 export default async function ArchivePage() {
   const userId = (await currentUserId())!;
   const posts = await prisma.post.findMany({
     where: { authorId: userId, deletedAt: null },
-    include: { circle: { select: { name: true } } },
+    include: { circle: { select: { name: true } }, images: { orderBy: { createdAt: "asc" }, select: { id: true } } },
     orderBy: { createdAt: "desc" },
   });
+  const now = new Date();
   return (
-    <div className="space-y-4">
-      <h1 className="text-xl font-semibold">自分の記録</h1>
-      <p className="text-ink-soft text-sm">期限が過ぎた投稿も、ここにだけ残ります。</p>
-      <ul className="space-y-3">
-        {posts.map((p) => (
-          <li key={p.id} className="rounded border border-line bg-card p-3 text-sm">
-            <div className="flex gap-2 text-xs text-ink-soft">
-              <span>{p.circle.name}</span>
-              <span>{p.createdAt.toLocaleString("ja-JP")}</span>
-              <span className="ml-auto">{isExpired(p.expiresAt) ? "期限切れ" : "公開中"}</span>
-            </div>
-            <p className="mt-2 whitespace-pre-wrap">{p.body}</p>
-            {p.tags.length > 0 && <p className="mt-1 text-xs text-ink-soft">{p.tags.map((t) => `#${t}`).join(" ")}</p>}
-            <div className="mt-2 flex gap-3 text-xs">
-              {!isExpired(p.expiresAt) && (
-                <ActionButton method="PATCH" url={`/api/posts/${p.id}`} body={{ expireNow: true }} className="text-ink-soft underline">今すぐ他人から消す</ActionButton>
+    <div>
+      <header className="flex flex-col gap-3 px-1">
+        <h1 className="text-2xl tracking-[0.16em]">じぶんの箱</h1>
+        <p className="text-sm leading-[2.25] text-ink-soft">寿命が尽きた紙は消えません。他の人から見えなくなって、ここにもどります。外に出ていた分だけ、しわと雨の跡がついた状態で。</p>
+      </header>
+      <ul className="mt-6 space-y-3">
+        {posts.map((p) => {
+          // もどってきた紙は、引き取った時点のいたみのまま止まる（wearOf が expiresAt で止める）
+          const wear = wearOf(p.createdAt, p.expiresAt, now);
+          const back = isExpired(p.expiresAt);
+          return (
+            <li
+              key={p.id}
+              style={paperStyle(p.id, wear)}
+              className={`relative overflow-hidden rounded-[26px] px-[22px] pb-4 pt-5 ${back ? "border border-edge bg-veil" : "bg-card shadow-paper"}`}
+            >
+              {isFolded(wear) && (
+                <div
+                  aria-hidden
+                  className={`pointer-events-none absolute top-0 h-7 w-7 ${foldsRight(p.id) ? "right-0" : "left-0"}`}
+                  style={foldStyle(p.id)}
+                />
               )}
-              <ActionButton method="DELETE" url={`/api/posts/${p.id}`} className="text-ink-soft underline">完全に消す</ActionButton>
-            </div>
-          </li>
-        ))}
+              <div className="label flex items-baseline gap-3 text-[11px] tracking-[0.12em] text-ink-soft">
+                <span className="text-ink">{p.circle.name}</span>
+                <span>{p.createdAt.toLocaleDateString("ja-JP")}</span>
+                <span className="ml-auto">{back ? "もどってきた" : "外に出ている"}</span>
+              </div>
+              {p.cw && <p className="label mt-2 text-[11px] text-ink-faint">注意文　{p.cw}</p>}
+              <PostBody form={p.form as Form} body={p.body} imageIds={p.images.map((i) => i.id)} />
+              {p.tags.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {p.tags.map((t) => <span key={t} className="label rounded-full border border-sage-fill bg-sage px-3 py-[5px] text-[11px] tracking-[0.06em] text-sage-ink">{t}</span>)}
+                </div>
+              )}
+              <div className="label mt-3 flex gap-4 text-[11px] tracking-[0.1em] text-ink-faint">
+                {!back && (
+                  <ActionButton method="PATCH" url={`/api/posts/${p.id}`} body={{ expireNow: true }} className="underline underline-offset-4">いま引き取る</ActionButton>
+                )}
+                <ActionButton method="DELETE" url={`/api/posts/${p.id}`} className="underline underline-offset-4">完全に消す</ActionButton>
+              </div>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
