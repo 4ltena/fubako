@@ -89,9 +89,9 @@ assert((await A("/api/posts", { method: "POST", body: tooBig, headers: { "conten
 // 今日の気配（人単位で見せない）
 const beforePage = await (await B("/c/" + circle.id)).text();
 assert(!beforePage.includes("今日、この場に来た人がいます"), "自分しか来ていない日は気配を出さない");
-await A("/c/" + circle.id); // A が場に来る
+await (await A("/c/" + circle.id)).text(); // A が場に来る（ストリーミングなので本文まで読み切る）
 const afterPage = await (await B("/c/" + circle.id)).text();
-const line = afterPage.match(/>([^<>]*この場に来た[^<>]*)</);
+const line = afterPage.match(/<p[^>]*>([^<>]*この場に来た[^<>]*)<\/p>/); // 要素だけを見る（ストリーミングでは RSC の payload が先に並ぶ）
 assert(line && line[1] === "今日、この場に来た人がいます", "今日来た人がいれば1行だけ出る（名前も数字も混ぜない）");
 assert(!/lastSeenAt/.test(JSON.stringify((await (await B("/api/posts?circleId=" + circle.id)).json()))), "lastSeenAt は API に出ない");
 
