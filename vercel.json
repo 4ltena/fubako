@@ -1,5 +1,4 @@
 {
-  "buildCommand": "npx prisma migrate deploy && next build",
   "crons": [
     {
       "path": "/api/cron/digest",

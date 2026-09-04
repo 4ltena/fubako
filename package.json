@@ -17,7 +17,8 @@
     "backfill:terms": "node scripts/backfill-terms.mjs",
     "verify:tokenizer": "node scripts/verify-tokenizer.mjs",
     "contrast": "node scripts/contrast.mjs",
-    "warm": "node scripts/keepwarm.mjs"
+    "warm": "node scripts/keepwarm.mjs",
+    "db:migrate": "prisma migrate deploy"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",

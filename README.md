@@ -156,6 +156,14 @@ Docker（Render / Fly.io / VPS）で動かす場合はイメージビルド時�
 
 ---
 
+### マイグレーション
+
+Vercel のビルドではマイグレーションを流さない（Neon の advisory lock 待ちでビルドが落ちることがあった）。スキーマを変えたら、デプロイの前に手元から流す。
+
+```bash
+DATABASE_URL_UNPOOLED=<Neon の直結 URL> npm run db:migrate
+```
+
 ### 速さ
 
 - 関数は `vercel.json` の `regions: ["sin1"]` で Neon と同じシンガポールに置く。DB との往復が数 ms になる
