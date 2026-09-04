@@ -3,6 +3,7 @@ import { sessionCookieName } from "@/lib/api";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { hashPassword, verifyPassword } from "@/lib/password";
+import { normalizeHandle } from "@/lib/handle";
 
 const SESSION_DAYS = 30;
 
@@ -11,6 +12,9 @@ const SESSION_DAYS = 30;
  * 未登録の名前はその場でアカウントを作る。Auth.js の Credentials は使わず、
  * 開発用ログイン（/api/dev/login）と同じ形で Session 行を作って Cookie を載せる。
  *
+ * 外部サイトからの自動 POST（ログイン CSRF）は、Origin か Sec-Fetch-Site で同一オリジンを確かめて弾く。
+ * 名前は normalizeHandle で寄せ、見た目が同じ別名でのなりすましを防ぐ。
+ *
  * 作らないもの: パスワードの再設定・メール確認・アカウント削除・レート制限。
  * 発表後に PASSWORD_LOGIN を外して閉じる前提のテスト用の入口。
  */
@@ -18,8 +22,9 @@ export async function POST(req: Request) {
   if (process.env.PASSWORD_LOGIN !== "1") {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
+  if (!sameOrigin(req)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
   const fd = await req.formData();
-  const handle = String(fd.get("handle") ?? "").trim();
+  const { key: handle, display } = normalizeHandle(String(fd.get("handle") ?? ""));
   const password = String(fd.get("password") ?? "");
   const fail = () => NextResponse.redirect(new URL("/login?password=wrong", req.url), 303);
   if (handle.length < 1 || handle.length > 20 || password.length < 8) return fail();
@@ -30,9 +35,16 @@ export async function POST(req: Request) {
     return signIn(req, user.id);
   }
   const created = await prisma.user.create({
-    data: { handle, name: handle, passwordHash: await hashPassword(password) },
+    data: { handle, name: display, passwordHash: await hashPassword(password) },
   });
   return signIn(req, created.id);
+}
+
+/** ブラウザからの POST は Origin か Sec-Fetch-Site を必ず付ける。付いていて自分と違えば他サイトからの送信。 */
+function sameOrigin(req: Request): boolean {
+  if (req.headers.get("sec-fetch-site") === "cross-site") return false;
+  const origin = req.headers.get("origin");
+  return origin === null || origin === new URL(req.url).origin;
 }
 
 async function signIn(req: Request, userId: string) {
