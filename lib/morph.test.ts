@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { parseMecab, tokenize, userDictCsv, USER_DICT_COST } from "./morph.ts";
+import { parseMecab, tokenize } from "./morph.ts";
 
-// MeCab に FORMAT_ARGS の書式（表層形・品詞・細分類1・原形 のタブ区切り4列）を
-// 渡したときの出力。この形が変わるとパースが壊れるので、ここで形ごと固定する。
+// kuromoji のトークンを整形した4列（表層形・品詞・細分類1・原形）のタブ区切り出力。
+// この形が変わるとパースが壊れるので、ここで形ごと固定する。
 const SAMPLE = "推し\t名詞\t一般\t推し\nの\t助詞\t連体化\tの\n新曲\t名詞\t一般\t新曲\nが\t助詞\t格助詞\tが\n良かっ\t形容詞\t自立\t良い\nた\t助動詞\t*\tた\n。\t記号\t句点\t。\nEOS\n";
 const NOISE = "3\t名詞\t数\t*\n回\t名詞\t接尾\t回\nそれ\t名詞\t代名詞\tそれ\nし\t動詞\t自立\tする\nホロライブ\t名詞\t固有名詞\t*\nEOS\n";
 
@@ -25,28 +25,25 @@ describe("parseMecab", () => {
   });
 });
 
-describe("MeCab が無い環境", () => {
-  it("tokenize は例外を投げず空配列を返す", async () => {
-    await expect(tokenize("推しの新曲が良かった", { bin: "fubako-no-such-mecab" })).resolves.toEqual([]);
-  });
-
+describe("空文字", () => {
   it("空文字はそもそも解析しない", async () => {
-    await expect(tokenize("   ", { bin: "fubako-no-such-mecab" })).resolves.toEqual([]);
+    await expect(tokenize("   ")).resolves.toEqual([]);
   });
 });
 
-describe("userDictCsv", () => {
-  it("タグを固有名詞として1行ずつ書き出す", () => {
-    expect(userDictCsv(["ネタバレ"])).toBe(`ネタバレ,-1,-1,${USER_DICT_COST},名詞,固有名詞,一般,*,*,*,ネタバレ,*,*`);
+describe("kuromoji で実際に解析する", () => {
+  // kuromoji の ipadic では「推し」は動詞「推す」の連用形として解析される
+  // （MeCab と違い名詞化した語として辞書に無い）。原形で拾えることを確かめる。
+  it("「推しの新曲が良かった」から 推す・新曲・良い が出る", async () => {
+    const tokens = await tokenize("推しの新曲が良かった");
+    const words = tokens.map((t) => t.word);
+    expect(words).toContain("推す");
+    expect(words).toContain("新曲");
+    expect(words).toContain("良い");
   });
 
-  it("重複と空白を落とし、CSV を壊す文字を取り除く", () => {
-    const csv = userDictCsv(["推し", "推し", "  ", "あ,い"]);
-    expect(csv.split("\n").length).toBe(2);
-    expect(csv).toContain("あい,-1,-1,");
-  });
-
-  it("タグが無ければ空", () => {
-    expect(userDictCsv([])).toBe("");
+  it("terms に入っている語が本文に含まれていれば proper として先頭に出る", async () => {
+    const tokens = await tokenize("すいせいの配信", { terms: ["すいせい"] });
+    expect(tokens[0]).toEqual({ word: "すいせい", kind: "proper" });
   });
 });

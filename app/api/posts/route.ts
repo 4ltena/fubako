@@ -4,7 +4,6 @@ import { done, requireUser } from "@/lib/api";
 import { prisma } from "@/lib/db";
 import { inferForm } from "@/lib/form";
 import { ACCEPTED_TYPES, processImage } from "@/lib/image";
-import { userDictFrom } from "@/lib/morph";
 import { extractTerms, RECENT_BODIES } from "@/lib/similar";
 import { deleteObject, putObject } from "@/lib/storage";
 import { isMember, timelineFor } from "@/lib/timeline";
@@ -59,7 +58,7 @@ export function parseTags(raw: string): string[] {
 
 /**
  * その投稿の語。同じ書き手の直近の本文も一緒に見て、繰り返し出る固有名詞を先頭に置く。
- * サークルのタグはユーザー辞書に入れて、推し活の固有名詞が未知語で割れるのを減らす。
+ * サークルのタグの語は、本文との文字列一致で固有名詞として拾う（terms）。
  * 語はここから外に出さない（API にも画面にも載せない）。
  */
 async function termsFor(userId: string, circleId: string, body: string, tags: string[]): Promise<string[]> {
@@ -73,8 +72,7 @@ async function termsFor(userId: string, circleId: string, body: string, tags: st
     prisma.post.findMany({ where: { circleId, deletedAt: null }, orderBy: { createdAt: "desc" }, take: 200, select: { tags: true } }),
   ]);
   const circleTags = [...new Set([...tags, ...tagRows.flatMap((r) => r.tags)])];
-  const userDict = await userDictFrom(circleTags);
-  return extractTerms(body, recent.map((r) => r.body), { userDict });
+  return extractTerms(body, recent.map((r) => r.body), { terms: circleTags });
 }
 
 /** 投稿。multipart なら画像を受け付ける。JSON はスモークが使うのでそのまま残す。 */
