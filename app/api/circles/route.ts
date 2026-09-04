@@ -2,6 +2,7 @@ import { randomInt } from "node:crypto";
 import { NextResponse } from "next/server";
 import { done, readBody, requireUser } from "@/lib/api";
 import { prisma } from "@/lib/db";
+import { memberLimit } from "@/lib/memberLimit";
 import { makeInvite } from "@/lib/invite";
 
 /** 誰も使っていない招待の言葉を作る。 */
@@ -25,6 +26,8 @@ export async function POST(req: Request) {
       // 口で言える言葉にする。ぶつかったら作り直す（44^10 なのでまず起きない）
       inviteCode: await freshInvite(),
       createdById: userId,
+      // 定員は既定 30。発表など大人数で使うときだけ環境変数で広げる（設定画面は作らない）
+      memberLimit: memberLimit(),
       memberships: { create: { userId } },
     },
   });
