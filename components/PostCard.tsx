@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { Blurhash } from "@/components/Blurhash";
 import type { Form } from "@/lib/form";
 import type { TimelinePost } from "@/lib/timeline";
-import { paperTexture } from "@/lib/wear";
 
 export function ImageGrid({ ids }: { ids: string[] }) {
   const [open, setOpen] = useState<string | null>(null);
@@ -222,7 +221,7 @@ export function PostCard({
   }
 
   return (
-    <article id={`post-${post.id}`} className="border-b border-line py-4" style={{ backgroundImage: paperTexture(post.id, wear) }}>
+    <article id={`post-${post.id}`} className="border-b border-line py-4" style={{ opacity: 1 - wear * 0.4 }}>
       <Meta name={post.authorName} at={post.createdAt} stamp={post.stamp} note={post.returned ? "もどってきた" : undefined} trailing={menu} />
       <PostBody form={form} body={opened.body} imageIds={opened.imageIds} />
       {post.veiled && (

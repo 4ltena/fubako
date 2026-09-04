@@ -3,7 +3,7 @@ import { PostBody } from "@/components/PostCard";
 import { currentUserId } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import type { Form } from "@/lib/form";
-import { paperTexture, wearOf } from "@/lib/wear";
+import { wearOf } from "@/lib/wear";
 
 function isExpired(d: Date) {
   return d.getTime() <= Date.now();
@@ -29,7 +29,7 @@ export default async function ArchivePage() {
           const wear = wearOf(p.createdAt, p.expiresAt, now);
           const back = isExpired(p.expiresAt);
           return (
-            <li key={p.id} style={{ backgroundImage: paperTexture(p.id, wear) }} className="border-b border-line py-4">
+            <li key={p.id} style={{ opacity: 1 - wear * 0.4 }} className="border-b border-line py-4">
               <div className="label flex items-baseline gap-3 text-[11px] text-ink-dim">
                 <span className="text-ink">{p.circle.name}</span>
                 <time className="mono">{p.createdAt.toLocaleDateString("ja-JP")}</time>

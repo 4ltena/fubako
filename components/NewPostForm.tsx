@@ -5,7 +5,7 @@ import { browserStore, clearDraft, loadDraft, saveDraft } from "@/lib/draft";
 
 const MAX_EDGE = 2048;
 const MAX_IMAGES = 4;
-const DAYS = [1, 3, 7];
+const DAYS = [7, 1, 3];
 
 /** 端末の写真を長辺 2048px の JPEG に縮める。EXIF の向きは createImageBitmap が適用する。 */
 async function shrink(file: File): Promise<Blob> {
@@ -181,15 +181,18 @@ export function NewPostForm({
         <p className="label text-[11px] leading-[1.9] text-ink-faint">この箱で宣言されている語: {declaredWords.join("　")}</p>
       )}
 
-      <div className="flex items-center gap-3">
-        <span className="label text-[11px] text-ink-faint">7日で消える</span>
-        <div className="label flex gap-3 text-[11px] text-ink-faint">
-          {DAYS.filter((d) => d !== 7).map((d) => (
-            <button key={d} type="button" onClick={() => setDays(d)} aria-pressed={days === d} className={days === d ? "text-ink underline underline-offset-4" : ""}>
-              {d}日
-            </button>
-          ))}
-        </div>
+      <div className="label flex items-center gap-3 text-[11px]">
+        {DAYS.map((d) => (
+          <button
+            key={d}
+            type="button"
+            onClick={() => setDays(d)}
+            aria-pressed={days === d}
+            className={days === d ? "text-ink underline underline-offset-4" : "text-ink-faint"}
+          >
+            {d === 7 ? "7日で消える" : `${d}日`}
+          </button>
+        ))}
       </div>
 
       {error && <p className="label text-[11px] text-ink">{error}</p>}
