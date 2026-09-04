@@ -53,3 +53,5 @@ GEMINI.md
 .claude/
 .codex/
 .cursor/
+.neon
+skills-lock.json
