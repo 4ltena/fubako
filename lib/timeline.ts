@@ -72,10 +72,9 @@ export async function seenAndPresentToday(userId: string, circleId: string, now:
 
 /** サークルのタイムライン。会員でなければ null（存在自体を見せない）。 */
 export async function timelineFor(userId: string, circleId: string): Promise<TimelinePost[] | null> {
+  if (!(await isMember(userId, circleId))) return null;
   const now = new Date();
-  // 会員確認と投稿の取得を並べて出す。会員でなければ結果は捨てて null（存在自体を見せない）。
-  const [member, posts, mutes] = await Promise.all([
-    isMember(userId, circleId),
+  const [posts, mutes] = await Promise.all([
     prisma.post.findMany({
       where: { circleId, deletedAt: null, OR: [{ expiresAt: { gt: now } }, { authorId: userId }] },
       orderBy: { createdAt: "desc" },
@@ -101,7 +100,6 @@ export async function timelineFor(userId: string, circleId: string): Promise<Tim
     }),
     muteWordsOf(userId),
   ]);
-  if (!member) return null;
   // 伏せ判定を先に済ませてから突き合わせる。伏せられる投稿へは案内しない。
   const entries = posts
     .filter((p) => isVisibleTo(p, userId, now))
