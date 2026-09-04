@@ -69,15 +69,15 @@ export function PostList({ posts, wears, circleId }: { posts: TimelinePost[]; we
   return (
     <>
       {fresh && (
-        <div className="flex items-center gap-3 rounded-full border border-sage-fill bg-sage py-3 pl-5 pr-3.5">
-          <span className="text-[13px] tracking-[0.06em] text-sage-deep">新しい紙がとどいています</span>
+        <div className="flex items-center gap-3 border-b border-line py-3">
+          <span className="label text-[12px] text-ink-dim">新しい紙がとどいています</span>
           <button
             type="button"
             onClick={() => {
               setFresh(false);
               router.refresh();
             }}
-            className="label ml-auto shrink-0 rounded-full bg-sage-fill px-4 py-[9px] text-[11px] tracking-[0.14em] text-sage-deep"
+            className="label ml-auto shrink-0 text-[11px] text-ink-faint underline underline-offset-4"
           >
             読みこむ
           </button>
@@ -87,7 +87,7 @@ export function PostList({ posts, wears, circleId }: { posts: TimelinePost[]; we
         <button
           onClick={openUnconfirmed}
           disabled={busy}
-          className="label w-full rounded-full border border-sage-fill bg-sage px-5 py-3 text-[11px] tracking-[0.14em] text-sage-deep"
+          className="label w-full border-b border-line py-3 text-[11px] text-ink-faint underline underline-offset-4"
         >
           未確認も開いて見る
         </button>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PostList } from "@/components/PostList";
+import { boxColor } from "@/lib/boxColor";
 import { currentUserId } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { seenAndPresentToday, timelineFor } from "@/lib/timeline";
@@ -26,24 +27,24 @@ export default async function TimelinePage({ params, searchParams }: { params: P
   const circle = (await prisma.circle.findUnique({ where: { id: circleId } }))!;
   const inviteUrl = `${process.env.APP_URL ?? ""}/join/${circle.inviteCode}`;
   const now = new Date();
+  const color = boxColor(circle.inviteCode);
   return (
     <div>
-      <header className="flex flex-col gap-1.5 px-1">
-        <span className="label text-[11px] tracking-[0.2em] text-ink-soft">{dateLine(now)}</span>
-        <div className="flex items-baseline gap-3">
-          <h1 className="text-xl tracking-[0.14em]">{circle.name}</h1>
-          <Link href="/" className="label ml-auto text-[11px] tracking-[0.14em] text-accent">べつの箱へ</Link>
-        </div>
+      <header className="flex items-center gap-3 border-b border-line pb-3">
+        <span aria-hidden className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
+        <h1 className="text-[20px] font-bold">{circle.name}</h1>
+        <time className="mono ml-auto shrink-0 text-[11px] text-ink-faint">{dateLine(now)}</time>
+        <Link href="/" className="label shrink-0 text-[11px] text-ink-faint underline underline-offset-4">べつの箱へ</Link>
       </header>
 
-      <div className="mt-5 space-y-3">
+      <div className="mt-2">
         {presentToday && (
-          <p className="label rounded-full border border-sage-fill bg-sage px-5 py-3 text-[13px] tracking-[0.06em] text-sage-deep">今日、この場に来た人がいます</p>
+          <p className="label border-b border-line py-3 text-[12px] text-ink-faint">今日、この場に来た人がいます</p>
         )}
         {posts.length === 0 && (
-          <div className="flex flex-col gap-[18px] rounded-[26px] bg-card px-6 pb-7 pt-[34px] shadow-paper">
-            <p className="text-[15px] leading-[2.2] text-ink-soft">ここにはまだ何もありません。読まれないことを書いておく場所としても使えます。</p>
-            <Link href={`/c/${circleId}/new`} className="label self-start rounded-full bg-accent px-7 py-3.5 text-xs tracking-[0.2em] text-card">はじめに一通書く</Link>
+          <div className="flex flex-col gap-3 border-b border-line py-6">
+            <p className="text-[15px] leading-[2.2] text-ink-dim">ここにはまだ何もありません。読まれないことを書いておく場所としても使えます。</p>
+            <Link href={`/c/${circleId}/new`} className="label self-start rounded-full bg-ink px-6 py-3 text-xs tracking-[0.1em] text-paper">はじめに一通書く</Link>
           </div>
         )}
         <PostList
@@ -53,18 +54,18 @@ export default async function TimelinePage({ params, searchParams }: { params: P
         />
       </div>
 
-      <details className="label mt-6 px-1 text-[11px] tracking-[0.14em] text-ink-faint">
+      <details className="label mt-6 text-[11px] text-ink-faint">
         <summary>この箱の言葉</summary>
-        <div className="mt-2 space-y-3 rounded-[20px] bg-card p-4 tracking-normal">
+        <div className="mt-2 space-y-3 border-t border-line pt-4">
           <p className="select-all text-lg tracking-[0.2em] text-ink">{circle.inviteCode}</p>
-          <p className="label text-[11px] leading-[1.9] tracking-[0.08em]">この言葉をもらった人だけが入れます。リンクでも渡せます。</p>
-          <code className="block select-all break-all text-[11px] text-ink-faint">{inviteUrl}</code>
+          <p className="label text-[11px] leading-[1.9]">この言葉をもらった人だけが入れます。リンクでも渡せます。</p>
+          <code className="mono block select-all break-all text-[11px] text-ink-faint">{inviteUrl}</code>
           <form method="post" action="/api/circles/leave" className="flex items-center gap-2 border-t border-line pt-3">
             <input type="hidden" name="circleId" value={circleId} />
-            <input name="word" required maxLength={60} placeholder="出るには、この言葉を書き写す" className="flex-1 bg-transparent text-[13px] tracking-normal placeholder:text-ink-pale focus:outline-none" />
-            <button className="label shrink-0 rounded-full bg-veil px-4 py-2 text-[11px] tracking-[0.14em] text-ink-soft">この箱を出る</button>
+            <input name="word" required maxLength={60} placeholder="出るには、この言葉を書き写す" className="flex-1 bg-transparent text-[13px] tracking-normal placeholder:text-ink-faint focus:outline-none" />
+            <button className="label shrink-0 rounded-full border border-line-2 px-4 py-2 text-[11px] text-ink-dim">この箱を出る</button>
           </form>
-          <p className="label text-[11px] leading-[1.9] tracking-[0.08em]">
+          <p className="label text-[11px] leading-[1.9]">
             {missedLeave ? "言葉が違います。出るのはやめておきました。" : "出ても、書いた紙はじぶんの箱に残ります。この言葉があれば、また入れます。"}
           </p>
         </div>

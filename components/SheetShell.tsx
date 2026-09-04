@@ -20,11 +20,11 @@ export function SheetShell({ title, children }: { title: string; children: React
     return () => window.removeEventListener("keydown", onKey);
   });
   return (
-    <div className="fixed inset-0 z-20 overflow-y-auto bg-screen/75 p-5 backdrop-blur-[2px] md:p-10">
-      <div className="mx-auto w-full max-w-[592px] rounded-[32px] bg-screen p-6 shadow-lift md:p-8">
-        <div className="mb-5 flex items-center justify-between">
-          <span className="text-[15px] tracking-[0.14em]">{title}</span>
-          <button type="button" onClick={close} className="label text-xs tracking-[0.16em] text-ink-faint">とじる</button>
+    <div className="fixed inset-0 z-20 overflow-y-auto bg-paper/90 p-5 md:p-10">
+      <div className="mx-auto w-full max-w-[600px] bg-paper p-6 md:p-8">
+        <div className="mb-5 flex items-center justify-between border-b border-line pb-4">
+          <span className="text-[15px] tracking-[0.06em]">{title}</span>
+          <button type="button" onClick={close} className="label text-xs tracking-[0.1em] text-ink-faint underline underline-offset-4">とじる</button>
         </div>
         {children}
       </div>

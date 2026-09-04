@@ -39,6 +39,16 @@ export async function muteWordsOf(userId: string): Promise<string[]> {
   return rules.map((r) => r.word);
 }
 
+/** その箱の会員が宣言している語。重複なく、数もひとかどうかも返さない。 */
+export async function declaredWordsFor(circleId: string): Promise<string[]> {
+  const rules = await prisma.muteRule.findMany({
+    where: { user: { memberships: { some: { circleId } } } },
+    select: { word: true },
+    distinct: ["word"],
+  });
+  return [...new Set(rules.map((r) => r.word))].sort((a, b) => a.localeCompare(b, "ja"));
+}
+
 export async function isMember(userId: string, circleId: string): Promise<boolean> {
   const m = await prisma.membership.findUnique({ where: { userId_circleId: { userId, circleId } } });
   return m !== null;
