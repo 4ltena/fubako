@@ -3,15 +3,10 @@ import { PostBody } from "@/components/PostCard";
 import { currentUserId } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import type { Form } from "@/lib/form";
-import { foldsRight, foldStyle, isFolded, marksOf, paperTexture, wearOf } from "@/lib/wear";
+import { paperTexture, wearOf } from "@/lib/wear";
 
 function isExpired(d: Date) {
   return d.getTime() <= Date.now();
-}
-
-/** もどってきた紙はいたんだまま重なって残る。角度もいたみ方も一枚ずつ違う（lib/wear.ts）。 */
-function paperStyle(id: string, wear: number) {
-  return { transform: `rotate(${marksOf(id).tilt.toFixed(2)}deg)`, backgroundImage: paperTexture(id, wear) };
 }
 
 export default async function ArchivePage() {
@@ -24,41 +19,30 @@ export default async function ArchivePage() {
   const now = new Date();
   return (
     <div>
-      <header className="flex flex-col gap-3 px-1">
-        <h1 className="text-2xl tracking-[0.16em]">じぶんの箱</h1>
-        <p className="text-sm leading-[2.25] text-ink-soft">寿命が尽きた紙は消えません。他の人から見えなくなって、ここにもどります。外に出ていた分だけ、しわと雨の跡がついた状態で。</p>
+      <header className="flex flex-col gap-3 border-b border-line pb-4">
+        <h1 className="text-[20px] font-bold">じぶんの箱</h1>
+        <p className="text-sm leading-[2.1] text-ink-dim">寿命が尽きた紙は消えません。他の人から見えなくなって、ここにもどります。外に出ていた分だけ、しわと雨の跡がついた状態で。</p>
       </header>
-      <ul className="mt-6 space-y-3">
+      <ul>
         {posts.map((p) => {
           // もどってきた紙は、引き取った時点のいたみのまま止まる（wearOf が expiresAt で止める）
           const wear = wearOf(p.createdAt, p.expiresAt, now);
           const back = isExpired(p.expiresAt);
           return (
-            <li
-              key={p.id}
-              style={paperStyle(p.id, wear)}
-              className={`relative overflow-hidden rounded-[26px] px-[22px] pb-4 pt-5 ${back ? "border border-edge bg-veil" : "bg-card shadow-paper"}`}
-            >
-              {isFolded(wear) && (
-                <div
-                  aria-hidden
-                  className={`pointer-events-none absolute top-0 h-7 w-7 ${foldsRight(p.id) ? "right-0" : "left-0"}`}
-                  style={foldStyle(p.id)}
-                />
-              )}
-              <div className="label flex items-baseline gap-3 text-[11px] tracking-[0.12em] text-ink-soft">
+            <li key={p.id} style={{ backgroundImage: paperTexture(p.id, wear) }} className="border-b border-line py-4">
+              <div className="label flex items-baseline gap-3 text-[11px] text-ink-dim">
                 <span className="text-ink">{p.circle.name}</span>
-                <span>{p.createdAt.toLocaleDateString("ja-JP")}</span>
-                <span className="ml-auto">{back ? "もどってきた" : "外に出ている"}</span>
+                <time className="mono">{p.createdAt.toLocaleDateString("ja-JP")}</time>
+                <span className="ml-auto text-ink-faint">{back ? "もどってきた" : "外に出ている"}</span>
               </div>
               {p.cw && <p className="label mt-2 text-[11px] text-ink-faint">注意文　{p.cw}</p>}
               <PostBody form={p.form as Form} body={p.body} imageIds={p.images.map((i) => i.id)} />
               {p.tags.length > 0 && (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {p.tags.map((t) => <span key={t} className="label rounded-full border border-sage-fill bg-sage px-3 py-[5px] text-[11px] tracking-[0.06em] text-sage-ink">{t}</span>)}
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {p.tags.map((t) => <span key={t} className="label text-[12px] text-ink-faint"><span className="text-ink-faint/70">#</span>{t}</span>)}
                 </div>
               )}
-              <div className="label mt-3 flex gap-4 text-[11px] tracking-[0.1em] text-ink-faint">
+              <div className="label mt-2 flex gap-4 text-[11px] text-ink-faint">
                 {!back && (
                   <ActionButton method="PATCH" url={`/api/posts/${p.id}`} body={{ expireNow: true }} className="underline underline-offset-4">いま引き取る</ActionButton>
                 )}

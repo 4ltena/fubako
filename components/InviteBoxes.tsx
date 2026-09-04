@@ -33,17 +33,17 @@ export function InviteBoxes({ from }: { from: string }) {
             {Array.from({ length: INVITE_LENGTH }, (_, i) => (
               <span
                 key={i}
-                className={`min-w-0 flex-1 rounded-[18px] border py-4 text-center text-lg tracking-normal ${chars[i] ? "border-edge bg-card shadow-paper" : "border-edge bg-veil"}`}
+                className={`min-w-0 flex-1 border-b py-4 text-center text-lg ${chars[i] ? "border-ink bg-veil" : "border-line-2 bg-veil"}`}
               >
                 {chars[i] ?? "　"}
               </span>
             ))}
           </span>
         ) : (
-          <span aria-hidden className="block truncate rounded-full bg-card px-6 py-4 text-[15px] shadow-paper">{value}</span>
+          <span aria-hidden className="block truncate border-b border-ink bg-veil px-6 py-4 text-[15px]">{value}</span>
         )}
       </label>
-      <button className="label w-full rounded-full bg-accent py-[18px] text-sm tracking-[0.3em] text-card shadow-lift">入る</button>
+      <button className="label w-full rounded-full bg-ink py-[18px] text-sm tracking-[0.2em] text-paper">入る</button>
     </form>
   );
 }
