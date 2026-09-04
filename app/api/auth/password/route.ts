@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { sessionCookieName } from "@/lib/api";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { hashPassword, verifyPassword } from "@/lib/password";
@@ -38,7 +39,7 @@ async function signIn(req: Request, userId: string) {
   const expires = new Date(Date.now() + SESSION_DAYS * 86400_000);
   const session = await prisma.session.create({ data: { sessionToken: randomUUID(), userId, expires } });
   const res = NextResponse.redirect(new URL("/", req.url), 303);
-  res.cookies.set("authjs.session-token", session.sessionToken, {
+  res.cookies.set(sessionCookieName(req), session.sessionToken, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",

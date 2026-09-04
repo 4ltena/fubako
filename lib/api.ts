@@ -25,3 +25,11 @@ export async function readBody(req: Request): Promise<Record<string, string>> {
   if (ct.includes("json")) return (await req.json()) as Record<string, string>;
   return Object.fromEntries([...(await req.formData()).entries()].map(([k, v]) => [k, String(v)]));
 }
+
+/**
+ * Auth.js のセッション Cookie 名。HTTPS では `__Secure-` 接頭辞付きの名前しか読まれない
+ * （ローカルの HTTP では接頭辞なし）。自前でセッションを載せる経路はこれを使う。
+ */
+export function sessionCookieName(req: Request): string {
+  return new URL(req.url).protocol === "https:" ? "__Secure-authjs.session-token" : "authjs.session-token";
+}
