@@ -56,6 +56,13 @@ export function NewPostForm({
     timer.current = setTimeout(() => saveDraft(draftKey, body, browserStore(), Date.now()), 600);
   }
 
+  function discard() {
+    // 予約中の自動保存を先に止める。止めないと捨てた本文が書き戻る
+    if (timer.current) clearTimeout(timer.current);
+    if (bodyRef.current) bodyRef.current.value = "";
+    clearDraft(draftKey, browserStore());
+  }
+
   async function pick(files: FileList | null) {
     if (!files) return;
     const next = [...images];
@@ -112,6 +119,10 @@ export function NewPostForm({
         placeholder={images.length > 0 ? "写真だけでもいい" : "雑に投げる"}
         className="block w-full resize-none border-b border-line bg-transparent pb-3 text-[17px] leading-[1.9] placeholder:text-ink-faint focus:outline-none"
       />
+      <div className="flex items-center gap-3">
+        <span className="label text-[11px] text-ink-faint">書きかけはこの端末に残ります</span>
+        <button type="button" onClick={discard} className="label ml-auto shrink-0 text-[11px] text-ink-faint underline underline-offset-4">捨てる</button>
+      </div>
 
       {images.length > 0 && (
         <ul className="grid grid-cols-4 gap-2">

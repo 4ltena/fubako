@@ -14,7 +14,7 @@ const t = {
   line2: "#d4d4cf",
   ink: "#1a1a1a",
   inkDim: "#6b6b66",
-  inkFaint: "#9c9c96",
+  inkFaint: "#8a8a84",
   veil: "#ececea",
   veilInk: "#4a4a46",
 };
