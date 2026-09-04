@@ -219,5 +219,21 @@ assert((await fetch(BASE + "/api/cron/digest")).status === 401, "cron は秘密�
 const page = await (await B("/c/" + circle.id)).text();
 assert(page.includes("noindex") && !page.includes("og:") && !page.includes("ネタバレ本文") && !page.includes("タグなし本文") && page.includes("無害本文"), "画面 HTML にも伏せた本文が無く noindex");
 assert((await (await fetch(BASE + "/robots.txt")).text()).includes("Disallow: /"), "robots.txt");
+
+// パスワードログイン（PASSWORD_LOGIN=1 で動かしたサーバに対してだけ検証する）
+const handle = "smoke-" + crypto.randomUUID().slice(0, 8);
+const passwordForm = (h, p) => new URLSearchParams({ handle: h, password: p });
+const firstTry = await fetch(BASE + "/api/auth/password", { method: "POST", body: passwordForm(handle, "correct-horse"), redirect: "manual" });
+if (firstTry.status === 404) {
+  assert(true, "PASSWORD_LOGIN 無しでは 404");
+} else {
+  assert(firstTry.status === 303 && firstTry.headers.get("location").endsWith("/"), "初回の名前+パスワードで作られて入れる");
+  const wrong = await fetch(BASE + "/api/auth/password", { method: "POST", body: passwordForm(handle, "not-the-password"), redirect: "manual" });
+  assert(wrong.status === 303 && wrong.headers.get("location").includes("password=wrong"), "同じ名前に違うパスワードでは入れない");
+  const again = await fetch(BASE + "/api/auth/password", { method: "POST", body: passwordForm(handle, "correct-horse"), redirect: "manual" });
+  assert(again.status === 303 && again.headers.get("location").endsWith("/"), "登録済みの名前+正しいパスワードでまた入れる");
+  await db.query('DELETE FROM "User" WHERE handle = $1', [handle]);
+}
+
 await prisma.$disconnect();
 console.log("ALL OK");
