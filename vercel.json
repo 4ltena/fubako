@@ -1,1 +1,1 @@
-{ "crons": [{ "path": "/api/cron/digest", "schedule": "0 12 * * *" }] }
+{ "buildCommand": "npx prisma migrate deploy && next build", "crons": [{ "path": "/api/cron/digest", "schedule": "0 12 * * *" }] }

@@ -148,7 +148,9 @@ PASSWORD_LOGIN=         # 1 にすると名前+パスワードでログインで
    EMAIL_FROM=               # 任意
    ```
 
-4. デプロイする。`npm run build` が `prisma migrate deploy` を先に走らせるので、マイグレーションは自動で適用される。`vercel.json` の cron 設定はそのまま使う
+4. デプロイする。`vercel.json` の `buildCommand`（`npx prisma migrate deploy && next build`）が Vercel のビルドのたびにマイグレーションを自動で適用する。cron 設定はそのまま使う
+
+Docker（Render / Fly.io / VPS）で動かす場合はイメージビルド時に `DATABASE_URL` が無いため、マイグレーションはビルドに含めていない。デプロイ前に `npx prisma migrate deploy` を実行してから `npm start` すること。
 
 発表が終わったら `PASSWORD_LOGIN` を外す（このログイン経路はパスワード再設定・レート制限を持たないテスト用の入口のため）。
 
