@@ -124,7 +124,7 @@ EMAIL_FROM=
 CRON_SECRET=            # ダイジェストcronの認証用
 ANTHROPIC_API_KEY=      # Phase 5以降のみ
 BLOB_READ_WRITE_TOKEN=  # 未設定ならローカル保存
-PASSWORD_LOGIN=         # 1 にすると名前+パスワードでログインできる（発表用の入口。テスト用）
+PASSWORD_LOGIN=         # 1 にすると名前だけでログインできる（発表用の入口。パスワードは使わない）
 ```
 
 ---
@@ -152,7 +152,7 @@ PASSWORD_LOGIN=         # 1 にすると名前+パスワードでログインで
 
 Docker（Render / Fly.io / VPS）で動かす場合はイメージビルド時に `DATABASE_URL` が無いため、マイグレーションはビルドに含めていない。デプロイ前に `npx prisma migrate deploy` を実行してから `npm start` すること。
 
-発表が終わったら `PASSWORD_LOGIN` を外す（このログイン経路はパスワード再設定・レート制限を持たないテスト用の入口のため）。
+発表が終わったら `PASSWORD_LOGIN` を外す（この入口は名前だけで誰にでもなれるテスト用のため）。
 
 ---
 

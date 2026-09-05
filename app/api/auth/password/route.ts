@@ -2,14 +2,13 @@ import { randomUUID } from "node:crypto";
 import { sessionCookieName } from "@/lib/api";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { hashPassword, verifyPassword } from "@/lib/password";
 import { normalizeHandle } from "@/lib/handle";
 
 const SESSION_DAYS = 30;
 
 /**
- * テスト用のパスワードログイン。`PASSWORD_LOGIN=1` のときだけ有効。
- * 未登録の名前はその場でアカウントを作る。Auth.js の Credentials は使わず、
+ * テスト用のログイン。`PASSWORD_LOGIN=1` のときだけ有効で、名前だけで入る。
+ * 未登録の名前はその場でアカウントを作る。パスワード欄は画面に網掛けで残すだけ。Auth.js の Credentials は使わず、
  * 開発用ログイン（/api/dev/login）と同じ形で Session 行を作って Cookie を載せる。
  *
  * 外部サイトからの自動 POST（ログイン CSRF）は、Origin か Sec-Fetch-Site で同一オリジンを確かめて弾く。
@@ -25,18 +24,13 @@ export async function POST(req: Request) {
   if (!sameOrigin(req)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
   const fd = await req.formData();
   const { key: handle, display } = normalizeHandle(String(fd.get("handle") ?? ""));
-  const password = String(fd.get("password") ?? "");
   const fail = () => NextResponse.redirect(new URL("/login?password=wrong", req.url), 303);
-  if (handle.length < 1 || handle.length > 20 || password.length < 8) return fail();
+  if (handle.length < 1 || handle.length > 20) return fail();
 
+  // テスト中は名前だけで入る。パスワードは受け取らず、照合もしない（発表後に入口ごと閉じる）。
   const user = await prisma.user.findUnique({ where: { handle } });
-  if (user) {
-    if (!user.passwordHash || !(await verifyPassword(password, user.passwordHash))) return fail();
-    return signIn(req, user.id);
-  }
-  const created = await prisma.user.create({
-    data: { handle, name: display, passwordHash: await hashPassword(password) },
-  });
+  if (user) return signIn(req, user.id);
+  const created = await prisma.user.create({ data: { handle, name: display } });
   return signIn(req, created.id);
 }
 

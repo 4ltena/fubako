@@ -222,20 +222,20 @@ assert((await (await fetch(BASE + "/robots.txt")).text()).includes("Disallow: /"
 
 // パスワードログイン（PASSWORD_LOGIN=1 で動かしたサーバに対してだけ検証する）
 const handle = "smoke-" + crypto.randomUUID().slice(0, 8);
-const passwordForm = (h, p) => new URLSearchParams({ handle: h, password: p });
+const passwordForm = (h, p = "") => new URLSearchParams(p ? { handle: h, password: p } : { handle: h });
 // 他サイトからの自動 POST（ログイン CSRF）は弾く
-assert((await fetch(BASE + "/api/auth/password", { method: "POST", body: passwordForm(handle, "correct-horse"), redirect: "manual", headers: { origin: "https://evil.example" } })).status === 403, "別オリジンからのログイン POST は 403");
-const firstTry = await fetch(BASE + "/api/auth/password", { method: "POST", body: passwordForm(handle, "correct-horse"), redirect: "manual" });
+assert((await fetch(BASE + "/api/auth/password", { method: "POST", body: passwordForm(handle), redirect: "manual", headers: { origin: "https://evil.example" } })).status === 403, "別オリジンからのログイン POST は 403");
+const firstTry = await fetch(BASE + "/api/auth/password", { method: "POST", body: passwordForm(handle), redirect: "manual" });
 if (firstTry.status === 404) {
   assert(true, "PASSWORD_LOGIN 無しでは 404");
 } else {
-  assert(firstTry.status === 303 && firstTry.headers.get("location").endsWith("/"), "初回の名前+パスワードで作られて入れる");
-  const wrong = await fetch(BASE + "/api/auth/password", { method: "POST", body: passwordForm(handle, "not-the-password"), redirect: "manual" });
-  assert(wrong.status === 303 && wrong.headers.get("location").includes("password=wrong"), "同じ名前に違うパスワードでは入れない");
-  const again = await fetch(BASE + "/api/auth/password", { method: "POST", body: passwordForm(handle, "correct-horse"), redirect: "manual" });
-  const lookalike = await fetch(BASE + "/api/auth/password", { method: "POST", body: passwordForm(handle + "\u200b", "another-pass-123"), redirect: "manual" });
-  assert(lookalike.headers.get("location")?.includes("password=wrong"), "ゼロ幅空白を足した名前は同じアカウント扱い（別パスワードでは入れない）");
-  assert(again.status === 303 && again.headers.get("location").endsWith("/"), "登録済みの名前+正しいパスワードでまた入れる");
+  assert(firstTry.status === 303 && firstTry.headers.get("location").endsWith("/"), "初回は名前だけで作られて入れる");
+  const again = await fetch(BASE + "/api/auth/password", { method: "POST", body: passwordForm(handle), redirect: "manual" });
+  assert(again.status === 303 && again.headers.get("location").endsWith("/"), "登録済みの名前でまた入れる");
+  const lookalike = await fetch(BASE + "/api/auth/password", { method: "POST", body: passwordForm(handle + "\u200b"), redirect: "manual" });
+  assert(lookalike.status === 303, "ゼロ幅空白を足した名前も同じアカウント扱いで入れる");
+  const rows = await db.query('SELECT count(*)::int AS n FROM "User" WHERE handle = $1', [handle]);
+  assert(rows.rows[0].n === 1, "同形の名前で別アカウントは作られない");
   await db.query('DELETE FROM "User" WHERE handle = $1', [handle]);
 }
 

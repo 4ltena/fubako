@@ -17,9 +17,17 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
       <div className="mt-8 space-y-3">
         {passwordLoginEnabled && (
           <form action="/api/auth/password" method="POST" className="space-y-3">
-            {passwordWrong && <p className="label text-[11px] text-ink-faint">名前かパスワードが違います。</p>}
+            {passwordWrong && <p className="label text-[11px] text-ink-faint">その名前では入れませんでした。</p>}
             <input name="handle" required maxLength={20} placeholder="名前" className="w-full border-b border-line bg-transparent px-1 py-3 text-[15px] placeholder:text-ink-faint focus:outline-none" />
-            <input name="password" type="password" required minLength={8} placeholder="パスワード（8文字以上）" className="w-full border-b border-line bg-transparent px-1 py-3 text-[15px] placeholder:text-ink-faint focus:outline-none" />
+            {/* テスト中はパスワードを使わない。欄は網掛けで残し、押せないことを見せる */}
+            <input
+              type="password"
+              disabled
+              aria-disabled="true"
+              placeholder="パスワード（テスト中は使いません）"
+              className="w-full border-b border-line px-1 py-3 text-[15px] text-ink-faint placeholder:text-ink-faint"
+              style={{ backgroundImage: "repeating-linear-gradient(135deg, #ececea 0 6px, #f3f3f1 6px 12px)" }}
+            />
             <button className="label w-full rounded-full bg-ink py-3.5 text-xs tracking-[0.1em] text-paper">入る（はじめてなら、この名前で作られます）</button>
           </form>
         )}
