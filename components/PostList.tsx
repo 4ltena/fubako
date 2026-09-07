@@ -1,13 +1,13 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PostCard } from "@/components/PostCard";
 import type { TimelinePost } from "@/lib/timeline";
 
 /** 新しい紙を見にいく間隔。押し出さないので、短くしない。 */
 const LOOK_EVERY_MS = 60_000;
 
-type Opened = { body: string; imageIds: string[] };
+type Opened = { body: string; imageIds: string[]; imageGrant?: string };
 
 /**
  * タイムラインの紙の並び。
@@ -20,6 +20,8 @@ export function PostList({ posts, wears, circleId }: { posts: TimelinePost[]; we
   const [opened, setOpened] = useState<Record<string, Opened>>({});
   const [busy, setBusy] = useState(false);
   const [fresh, setFresh] = useState(false);
+  const [error, setError] = useState("");
+  const opening = useRef(false);
   const router = useRouter();
   // 1枚も無い箱でも、開いたときから後に置かれた紙は拾う
   const [openedAt] = useState(() => new Date().toISOString());
@@ -32,10 +34,12 @@ export function PostList({ posts, wears, circleId }: { posts: TimelinePost[]; we
     let alive = true;
     const look = async () => {
       if (document.visibilityState !== "visible") return;
-      const r = await fetch(`/api/circles/${circleId}/fresh?since=${encodeURIComponent(newest)}`);
-      if (!r.ok || !alive) return;
-      const { fresh: got } = (await r.json()) as { fresh: boolean };
-      if (got && alive) setFresh(true);
+      try {
+        const r = await fetch(`/api/circles/${circleId}/fresh?since=${encodeURIComponent(newest)}`);
+        if (!r.ok || !alive) return;
+        const { fresh: got } = (await r.json()) as { fresh: boolean };
+        if (got && alive) setFresh(true);
+      } catch { /* 新着確認は次の周期で再試行する。 */ }
     };
     const timer = setInterval(look, LOOK_EVERY_MS);
     return () => {
@@ -47,14 +51,26 @@ export function PostList({ posts, wears, circleId }: { posts: TimelinePost[]; we
   const unconfirmed = posts.filter((p) => p.veiled && p.kind === "unconfirmed" && opened[p.id] === undefined);
 
   async function openUnconfirmed() {
+    if (opening.current) return;
+    opening.current = true;
     setBusy(true);
+    setError("");
     const got: Record<string, Opened> = {};
-    for (const p of unconfirmed) {
-      const r = await fetch(`/api/posts/${p.id}/reveal`);
-      if (r.ok) got[p.id] = (await r.json()) as Opened;
+    let failed = false;
+    try {
+      for (const p of unconfirmed) {
+        try {
+          const r = await fetch(`/api/posts/${p.id}/reveal`);
+          if (r.ok) got[p.id] = (await r.json()) as Opened;
+          else failed = true;
+        } catch { failed = true; }
+      }
+    } finally {
+      setOpened((prev) => ({ ...prev, ...got }));
+      if (failed) setError("ひらけなかった紙があります。もう一度試してください。");
+      opening.current = false;
+      setBusy(false);
     }
-    setOpened((prev) => ({ ...prev, ...got }));
-    setBusy(false);
   }
 
   /** 伏せ直した紙は、まとめて開いたときの本文も捨てる。 */
@@ -77,7 +93,7 @@ export function PostList({ posts, wears, circleId }: { posts: TimelinePost[]; we
               setFresh(false);
               router.refresh();
             }}
-            className="label ml-auto shrink-0 text-[11px] text-ink-faint underline underline-offset-4"
+            className="label ml-auto flex min-h-11 shrink-0 items-center px-1 text-[12px] text-ink-dim underline underline-offset-4"
           >
             読みこむ
           </button>
@@ -87,14 +103,15 @@ export function PostList({ posts, wears, circleId }: { posts: TimelinePost[]; we
         <button
           onClick={openUnconfirmed}
           disabled={busy}
-          className="label w-full border-b border-line py-3 text-[11px] text-ink-faint underline underline-offset-4"
+          className="label min-h-11 w-full border-b border-line py-3 text-[12px] text-ink-dim underline underline-offset-4"
         >
           未確認も開いて見る
         </button>
       )}
       {posts.map((p) => (
-        <PostCard key={p.id} post={p} wear={wears[p.id] ?? 0} preopened={opened[p.id] ?? null} onVeiled={forget} />
+        <PostCard key={p.id} post={p} wear={wears[p.id] ?? 0} preopened={opened[p.id] ?? null} onVeiled={forget} onClosed={forget} />
       ))}
+      {error && <p role="alert" className="label py-3 text-[12px] text-ink-dim">{error}</p>}
     </>
   );
 }

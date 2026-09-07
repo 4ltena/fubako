@@ -6,7 +6,7 @@ const past = new Date(now.getTime() - 1000);
 const future = new Date(now.getTime() + 1000);
 
 describe("isVisibleTo", () => {
-  const base = { authorId: "me", deletedAt: null };
+  const base = { authorId: "me", visibility: "circle" as const, deletedAt: null };
   it("期限内は誰にでも見える", () => {
     expect(isVisibleTo({ ...base, expiresAt: future }, "other", now)).toBe(true);
   });
@@ -19,6 +19,10 @@ describe("isVisibleTo", () => {
   });
   it("削除済みは本人にも見えない", () => {
     expect(isVisibleTo({ ...base, expiresAt: future, deletedAt: now }, "me", now)).toBe(false);
+  });
+  it("自分だけに保存した投稿は本人以外へ見せない", () => {
+    expect(isVisibleTo({ ...base, visibility: "private", expiresAt: future }, "other", now)).toBe(false);
+    expect(isVisibleTo({ ...base, visibility: "private", expiresAt: future }, "me", now)).toBe(true);
   });
 });
 

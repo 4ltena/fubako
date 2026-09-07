@@ -30,23 +30,16 @@ export type TimelinePost = {
   reacted: boolean;
   images: TimelineImage[];
 } & (
-  | { veiled: false; body: string; imageIds: string[]; form: Form; tags: string[]; similar?: { postId: string } }
-  | { veiled: true; reason: string; kind: VeilKind }
+  | { veiled: false; body: string; imageIds: string[]; form: Form; tags: string[]; similar?: { postId: string }; received?: boolean }
+  | { veiled: true; reason: string; kind: VeilKind; received?: boolean }
 );
 
-export async function muteWordsOf(userId: string): Promise<string[]> {
-  const rules = await prisma.muteRule.findMany({ where: { userId }, select: { word: true } });
-  return rules.map((r) => r.word);
-}
-
-/** その箱の会員が宣言している語。重複なく、数もひとかどうかも返さない。 */
-export async function declaredWordsFor(circleId: string): Promise<string[]> {
-  const rules = await prisma.muteRule.findMany({
-    where: { user: { memberships: { some: { circleId } } } },
-    select: { word: true },
-    distinct: ["word"],
-  });
-  return [...new Set(rules.map((r) => r.word))].sort((a, b) => a.localeCompare(b, "ja"));
+export async function muteWordsOf(userId: string, circleId?: string): Promise<string[]> {
+  const [rules, topics] = await Promise.all([
+    prisma.muteRule.findMany({ where: { userId }, select: { word: true } }),
+    circleId ? prisma.topicMute.findMany({ where: { userId, circleId }, select: { word: true } }) : Promise.resolve([]),
+  ]);
+  return [...rules, ...topics].map((rule) => rule.word);
 }
 
 export async function isMember(userId: string, circleId: string): Promise<boolean> {
@@ -76,13 +69,14 @@ export async function timelineFor(userId: string, circleId: string): Promise<Tim
   const now = new Date();
   const [posts, mutes] = await Promise.all([
     prisma.post.findMany({
-      where: { circleId, deletedAt: null, OR: [{ expiresAt: { gt: now } }, { authorId: userId }] },
+      where: { circleId, visibility: "circle", deletedAt: null, OR: [{ expiresAt: { gt: now } }, { authorId: userId }] },
       orderBy: { createdAt: "desc" },
       take: 100,
       // terms は突き合わせにだけ使う。返す値には決して載せない（下の common を参照）。
       select: {
         id: true,
         authorId: true,
+        visibility: true,
         body: true,
         cw: true,
         tags: true,
@@ -92,20 +86,21 @@ export async function timelineFor(userId: string, circleId: string): Promise<Tim
         expiresAt: true,
         deletedAt: true,
         author: { select: { name: true } },
-        reactions: { where: { userId }, select: { userId: true } },
+        // 残っている他者の明示的反応は、退出・取消後も投稿者への受領として保持する。
+        reactions: { select: { userId: true } },
         // 読み手自身が伏せた紙かどうか。自分の行だけを引くので、他人の伏せ直しは1行も読まない
         veils: { where: { userId }, select: { userId: true } },
         images: { orderBy: { createdAt: "asc" }, select: { id: true, blurhash: true, width: true, height: true } },
       },
     }),
-    muteWordsOf(userId),
+    muteWordsOf(userId, circleId),
   ]);
   // 伏せ判定を先に済ませてから突き合わせる。伏せられる投稿へは案内しない。
   const entries = posts
     .filter((p) => isVisibleTo(p, userId, now))
     .map((p) => ({
       post: p,
-      veil: p.authorId === userId ? ({ veiled: false } as const) : veilFor(p.tags, mutes, p.cw, { selfVeiled: p.veils.length > 0 }),
+      veil: p.authorId === userId ? ({ veiled: false } as const) : veilFor({ body: p.body, cw: p.cw, tags: p.tags }, mutes, { selfVeiled: p.veils.length > 0 }),
     }));
   // 突き合わせの相手は、いま読み手のタイムラインに載っている投稿だけ（飛び先の無い案内を出さない）。
   const candidates = entries.map((e) => ({ id: e.post.id, authorId: e.post.authorId, terms: e.post.terms, veiled: e.veil.veiled }));
@@ -120,7 +115,8 @@ export async function timelineFor(userId: string, circleId: string): Promise<Tim
         stamp: jstStamp(p.createdAt, now),
         expiresAt: p.expiresAt.toISOString(),
         returned: p.authorId === userId && p.expiresAt.getTime() <= now.getTime(),
-        reacted: p.reactions.length > 0,
+        reacted: p.reactions.some((reaction) => reaction.userId === userId),
+        ...(p.authorId === userId ? { received: p.reactions.some((reaction) => reaction.userId !== userId) } : {}),
         images: p.images.map(({ blurhash, width, height }) => ({ blurhash, width, height })),
       };
       if (veil.veiled) return { ...common, veiled: true as const, reason: veil.reason, kind: veil.kind };

@@ -1,0 +1,14 @@
+# 端末固有の秘密、データ、作業記録、確認用生成物は Vercel へ送らない。
+.env*
+.data
+.superpowers
+docs/superpowers
+.claude
+.codex
+.cursor
+CLAUDE.md
+AGENTS.md
+GEMINI.md
+.git
+node_modules
+public/ui-preview

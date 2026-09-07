@@ -15,6 +15,7 @@ model User {
   emailVerified DateTime?
   image         String?
   createdAt     DateTime  @default(now())
+  digestEnabled Boolean   @default(true)
   // テスト用のパスワードログイン（PASSWORD_LOGIN=1 のときのみ）。
   handle        String?   @unique
   passwordHash  String?
@@ -27,6 +28,8 @@ model User {
   muteRules   MuteRule[]
   circles     Circle[]
   postVeils   PostVeil[]
+  circleBans  CircleBan[]
+  topicMutes  TopicMute[]
 }
 
 model Account {
@@ -52,6 +55,7 @@ model Session {
   sessionToken String   @unique
   userId       String
   expires      DateTime
+  authMethod   String   @default("legacy")
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
@@ -65,9 +69,11 @@ model VerificationToken {
 
 // ---- fubako ----
 model Circle {
+  description String @default("")
   id          String   @id @default(cuid())
   name        String
   inviteCode  String   @unique
+  invitesEnabled Boolean @default(true)
   memberLimit Int      @default(30)
   createdAt   DateTime @default(now())
   createdById String
@@ -75,6 +81,8 @@ model Circle {
 
   memberships Membership[]
   posts       Post[]
+  bans        CircleBan[]
+  topicMutes  TopicMute[]
 }
 
 model Membership {
@@ -83,13 +91,31 @@ model Membership {
   joinedAt   DateTime  @default(now())
   // 「今日この場に来た人がいるか」だけに使う。本人にも他人にも表示せず API でも返さない。
   lastSeenAt DateTime?
+  archivedAt DateTime?
   user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   circle     Circle    @relation(fields: [circleId], references: [id], onDelete: Cascade)
 
   @@id([userId, circleId])
 }
 
+/// 管理者による参加取消。解除されるまで同じアカウントの再参加を止める。
+model CircleBan {
+  circleId String
+  userId String
+  createdAt DateTime @default(now())
+  circle Circle @relation(fields: [circleId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([circleId, userId])
+}
+
+enum PostVisibility {
+  circle
+  private
+}
+
 model Post {
+  visibility         PostVisibility @default(circle)
   id                 String     @id @default(cuid())
   circleId           String
   authorId           String
@@ -99,6 +125,9 @@ model Post {
   expiresAt          DateTime
   deletedAt          DateTime?
   cw                 String?
+  afterword          String     @default("")
+  clientRequestId    String?
+  requestHash        String?
   // ダイジェストで反応を知らせた時刻。同じ反応で二度知らせないための印。
   reactionNotifiedAt DateTime?
   // 投稿の「形」。書き手には選ばせず lib/form.ts が本文と画像から決める。
@@ -113,6 +142,7 @@ model Post {
 
   @@index([circleId, createdAt])
   @@index([authorId, createdAt])
+  @@unique([authorId, clientRequestId])
 }
 
 model Reaction {
@@ -159,4 +189,18 @@ model Image {
   post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
 
   @@index([postId, createdAt])
+}
+
+/// 見る準備ができるまで、本人が箱ごとに伏せる話題。
+model TopicMute {
+  id             String @id @default(cuid())
+  userId         String
+  circleId       String
+  word           String
+  normalizedWord String
+  createdAt      DateTime @default(now())
+  user           User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  circle         Circle @relation(fields: [circleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, circleId, normalizedWord])
 }

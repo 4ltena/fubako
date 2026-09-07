@@ -11,6 +11,7 @@ export const DEFAULT_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000; // 暫定7日、未�
 
 export interface VisibilityInput {
   authorId: string;
+  visibility: "circle" | "private";
   expiresAt: Date;
   deletedAt: Date | null;
 }
@@ -22,6 +23,7 @@ export function defaultExpiresAt(now: Date = new Date()): Date {
 export function isVisibleTo(post: VisibilityInput, viewerId: string, now: Date = new Date()): boolean {
   if (post.deletedAt) return false;
   if (post.authorId === viewerId) return true;
+  if (post.visibility === "private") return false;
   return now.getTime() < post.expiresAt.getTime();
 }
 

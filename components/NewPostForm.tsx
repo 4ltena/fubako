@@ -1,202 +1,202 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { browserStore, clearDraft, loadDraft, saveDraft } from "@/lib/draft";
+import { browserStore, clearDraft, type Draft, type DraftVisibility, loadDraft, saveCurrentDraft } from "@/lib/draft";
 
 const MAX_EDGE = 2048;
 const MAX_IMAGES = 4;
 const DAYS = [7, 1, 3];
+type ImageItem = { blob: Blob; url: string };
 
-/** 端末の写真を長辺 2048px の JPEG に縮める。EXIF の向きは createImageBitmap が適用する。 */
 async function shrink(file: File): Promise<Blob> {
-  const bmp = await createImageBitmap(file, { imageOrientation: "from-image" });
-  const scale = Math.min(1, MAX_EDGE / Math.max(bmp.width, bmp.height));
+  const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+  const scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height));
   const canvas = document.createElement("canvas");
-  canvas.width = Math.round(bmp.width * scale);
-  canvas.height = Math.round(bmp.height * scale);
-  canvas.getContext("2d")!.drawImage(bmp, 0, 0, canvas.width, canvas.height);
-  bmp.close();
-  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob"))), "image/jpeg", 0.85));
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  return new Promise((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("toBlob")), "image/jpeg", .85));
 }
 
-export function NewPostForm({
-  circleId,
-  suggested,
-  declaredWords,
-  draftKey,
-  afterPost = "push",
-}: {
-  circleId: string;
-  suggested: string[];
-  declaredWords: string[];
-  draftKey: string;
-  afterPost?: "push" | "back";
-}) {
+export function NewPostForm({ circleId, suggested, draftKey, afterPost = "push" }: { circleId: string; suggested: string[]; draftKey: string; afterPost?: "push" | "back" }) {
   const router = useRouter();
-  const [images, setImages] = useState<{ blob: Blob; url: string }[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [body, setBody] = useState("");
+  const [cw, setCw] = useState("");
   const [tags, setTags] = useState("");
+  const [days, setDays] = useState(7);
+  const [visibility, setVisibility] = useState<DraftVisibility>("circle");
+  const [images, setImages] = useState<ImageItem[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [writingTag, setWritingTag] = useState(false);
   const [writingCw, setWritingCw] = useState(false);
-  const [days, setDays] = useState(7);
-  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const [readyState, setReadyState] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const draftRef = useRef<Draft>({ body: "", cw: "", tags: "", days: 7, visibility: "circle" });
+  const imagesRef = useRef<ImageItem[]>([]);
+  const requestId = useRef("");
+  const ready = useRef(false);
+  const submitting = useRef(false);
+  const generation = useRef(0);
 
-  // 書きかけを端末から戻す。DOM に直接入れるので、state もハイドレーションも動かさない。
-  useEffect(() => {
-    const el = bodyRef.current;
-    if (el && el.value === "") el.value = loadDraft(draftKey, browserStore(), Date.now());
-  }, [draftKey]);
-
-  /** 打つたびに残す（少し待ってから）。件数も「下書きがあります」も出さない。 */
-  function keep(body: string) {
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => saveDraft(draftKey, body, browserStore(), Date.now()), 600);
+  function newRequest() { requestId.current = crypto.randomUUID(); }
+  function revoke(items: ImageItem[]) { items.forEach((image) => URL.revokeObjectURL(image.url)); }
+  function saveCurrent() {
+    if (!ready.current || submitting.current) return;
+    if (!saveCurrentDraft(draftKey, draftRef.current, browserStore())) setError("この端末に書きかけを残せませんでした。送信はできます。");
   }
-
-  function discard() {
-    // 予約中の自動保存を先に止める。止めないと捨てた本文が書き戻る
-    if (timer.current) clearTimeout(timer.current);
-    if (bodyRef.current) bodyRef.current.value = "";
-    clearDraft(draftKey, browserStore());
+  function setDraft(next: Partial<Draft>) {
+    draftRef.current = { ...draftRef.current, ...next };
+    if ("body" in next) setBody(next.body!);
+    if ("cw" in next) setCw(next.cw!);
+    if ("tags" in next) setTags(next.tags!);
+    if ("days" in next) setDays(next.days!);
+    if ("visibility" in next) setVisibility(next.visibility!);
+    newRequest();
+    saveCurrent();
   }
-
-  async function pick(files: FileList | null) {
-    if (!files) return;
-    const next = [...images];
-    for (const f of Array.from(files).slice(0, MAX_IMAGES - images.length)) {
-      const blob = await shrink(f);
-      next.push({ blob, url: URL.createObjectURL(blob) });
-    }
+  function replaceImages(next: ImageItem[]) {
+    imagesRef.current = next;
     setImages(next);
   }
-
-  /** 提案された語は押すだけで入る。自分で書いてもいい。 */
-  function toggleTag(t: string) {
-    const has = tags.split(/\s+/).filter(Boolean);
-    setTags(has.includes(t) ? has.filter((x) => x !== t).join(" ") : [...has, t].join(" "));
+  function resetImages() {
+    generation.current += 1;
+    setPicking(false);
+    revoke(imagesRef.current);
+    replaceImages([]);
+    if (fileRef.current) fileRef.current.value = "";
   }
 
-  async function submit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setBusy(true);
-    setError(null);
-    const fd = new FormData(e.currentTarget);
-    fd.delete("images");
-    images.forEach((img, i) => fd.append("images", img.blob, `${i}.jpg`));
-    const r = await fetch("/api/posts", { method: "POST", body: fd });
-    if (r.ok) {
-      // 投げ終わった本文を端末に残さない
-      if (timer.current) clearTimeout(timer.current);
-      clearDraft(draftKey, browserStore());
-      // 重ねて出しているときは履歴を1つ戻す（push すると「戻る」でまた開く）
-      if (afterPost === "back") router.back();
-      else router.push(`/c/${circleId}`);
-      router.refresh();
-      return;
+  useEffect(() => {
+    const restore = setTimeout(() => {
+      const saved = loadDraft(draftKey, browserStore(), Date.now());
+      draftRef.current = saved;
+      setBody(saved.body); setCw(saved.cw); setTags(saved.tags); setDays(saved.days); setVisibility(saved.visibility);
+      setWritingTag(Boolean(saved.tags)); setWritingCw(Boolean(saved.cw));
+      newRequest(); ready.current = true; setReadyState(true);
+    });
+    return () => {
+      clearTimeout(restore);
+      generation.current += 1;
+      revoke(imagesRef.current);
+      imagesRef.current = [];
+    };
+  }, [draftKey]);
+
+  function discard() {
+    if (busy) return;
+    draftRef.current = { body: "", cw: "", tags: "", days: 7, visibility: "circle" };
+    setBody(""); setCw(""); setTags(""); setDays(7); setVisibility("circle"); setError(null);
+    resetImages();
+    clearDraft(draftKey, browserStore());
+    newRequest();
+  }
+  async function pick(files: FileList | null) {
+    if (!files || busy || picking) return;
+    const pickGeneration = generation.current;
+    const remaining = MAX_IMAGES - imagesRef.current.length;
+    if (remaining < 1) return;
+    setPicking(true);
+    const created: ImageItem[] = [];
+    try {
+      for (const file of Array.from(files).slice(0, remaining)) {
+        const blob = await shrink(file);
+        if (generation.current !== pickGeneration || submitting.current) { revoke(created); return; }
+        created.push({ blob, url: URL.createObjectURL(blob) });
+      }
+      if (generation.current === pickGeneration && !submitting.current) {
+        replaceImages([...imagesRef.current, ...created]);
+        newRequest();
+      } else revoke(created);
+    } catch {
+      if (generation.current === pickGeneration) setError("写真を読み込めませんでした。別の写真を選んでください。");
+      revoke(created);
+    } finally {
+      if (generation.current === pickGeneration) setPicking(false);
+      if (fileRef.current) fileRef.current.value = "";
     }
-    setError(r.status === 413 ? "画像が大きすぎます。枚数を減らしてください" : "投げられませんでした");
-    setBusy(false);
+  }
+  function removeImage(index: number) {
+    if (busy || picking) return;
+    const removed = imagesRef.current[index];
+    if (removed) URL.revokeObjectURL(removed.url);
+    replaceImages(imagesRef.current.filter((_, itemIndex) => itemIndex !== index));
+    newRequest();
+  }
+  function toggleTag(tag: string) {
+    const current = draftRef.current.tags.split(/\s+/).filter(Boolean);
+    setDraft({ tags: current.includes(tag) ? current.filter((word) => word !== tag).join(" ") : [...current, tag].join(" ") });
+  }
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (submitting.current || picking || !ready.current) return;
+    submitting.current = true;
+    setBusy(true); setError(null);
+    const snapshot = draftRef.current;
+    const fd = new FormData();
+    fd.set("circleId", circleId); fd.set("body", snapshot.body); fd.set("cw", snapshot.cw); fd.set("tags", snapshot.tags); fd.set("visibility", snapshot.visibility); fd.set("clientRequestId", requestId.current);
+    if (snapshot.visibility === "circle") fd.set("days", String(snapshot.days));
+    imagesRef.current.forEach((image, index) => fd.append("images", image.blob, `${index}.jpg`));
+    try {
+      const response = await fetch("/api/posts", { method: "POST", body: fd });
+      if (!response.ok) {
+        setError(response.status === 413 ? "画像が大きすぎます。枚数を減らしてください。" : "投げられませんでした。内容は残して、もう一度試せます。");
+        return;
+      }
+      generation.current += 1;
+      clearDraft(draftKey, browserStore());
+      revoke(imagesRef.current); replaceImages([]);
+      if (snapshot.visibility === "private") router.push("/archive");
+      else if (afterPost === "back") router.back(); else router.push(`/c/${circleId}`);
+      router.refresh();
+    } catch {
+      setError("通信できませんでした。内容は残して、もう一度試せます。");
+    } finally {
+      submitting.current = false;
+      setBusy(false);
+    }
   }
 
   const chosen = tags.split(/\s+/).filter(Boolean);
-  return (
-    <form onSubmit={submit} className="space-y-5">
-      <input type="hidden" name="circleId" value={circleId} />
-      <input type="hidden" name="tags" value={tags} />
-      <input type="hidden" name="days" value={days} />
-
-      <textarea
-        ref={bodyRef}
-        name="body"
-        required={images.length === 0}
-        maxLength={2000}
-        rows={5}
-        autoFocus
-        onChange={(e) => keep(e.target.value)}
-        placeholder={images.length > 0 ? "写真だけでもいい" : "雑に投げる"}
-        className="block w-full resize-none border-b border-line bg-transparent pb-3 text-[17px] leading-[1.9] placeholder:text-ink-faint focus:outline-none"
-      />
-      <div className="flex items-center gap-3">
-        <span className="label text-[11px] text-ink-faint">書きかけはこの端末に残ります</span>
-        <button type="button" onClick={discard} className="label ml-auto shrink-0 text-[11px] text-ink-faint underline underline-offset-4">捨てる</button>
-      </div>
-
-      {images.length > 0 && (
-        <ul className="grid grid-cols-4 gap-2">
-          {images.map((img, i) => (
-            <li key={img.url} className="relative">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={img.url} alt="" className="aspect-square w-full object-cover" />
-              <button type="button" onClick={() => setImages(images.filter((_, j) => j !== i))} aria-label="外す" className="absolute right-1 top-1 bg-paper/90 px-2 text-xs">×</button>
-            </li>
-          ))}
-        </ul>
-      )}
-
+  const formDisabled = busy || !readyState;
+  const submitDisabled = formDisabled || picking;
+  return <form onSubmit={submit} className="space-y-5">
+    <fieldset disabled={formDisabled} className="space-y-5 disabled:opacity-60">
+      <label className="sr-only" htmlFor="post-body">本文</label>
+      <textarea id="post-body" name="body" value={body} required={images.length === 0} maxLength={2000} rows={5} autoFocus onChange={(event) => setDraft({ body: event.target.value })} placeholder={images.length ? "写真だけでもいい" : "雑に投げる"} className="block w-full resize-none border-b border-line bg-transparent pb-3 text-[17px] leading-[1.9] placeholder:text-ink-faint focus:outline-none" />
+      <div className="flex items-center gap-3"><span className="label text-[12px] text-ink-dim">書きかけはこの端末に24時間残ります</span><button type="button" onClick={discard} className="label ml-auto min-h-11 shrink-0 px-2 text-[12px] text-ink-dim underline underline-offset-4">捨てる</button></div>
+      {images.length > 0 && <><ul className="grid grid-cols-4 gap-2">{images.map((image, index) => <li key={image.url} className="relative">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={image.url} alt="" className="aspect-square w-full object-cover" />
+        <button type="button" onClick={() => removeImage(index)} aria-label="写真を外す" className="absolute right-1 top-1 flex size-11 items-center justify-center bg-paper/90 text-sm">×</button>
+      </li>)}</ul><p className="label text-[12px] text-ink-dim">写真はこの画面を離れると残りません。</p></>}
       <div className="flex flex-wrap items-center gap-2">
-        {images.length < MAX_IMAGES && (
-          <button type="button" onClick={() => fileRef.current?.click()} className="label flex size-9 items-center justify-center rounded-full border border-line-2 text-[15px] text-ink-dim">＋</button>
-        )}
-        <input ref={fileRef} type="file" name="images" accept="image/jpeg,image/png,image/webp,image/gif" multiple onChange={(e) => pick(e.target.files)} className="hidden" />
-        {!writingTag && (
-          <button type="button" onClick={() => setWritingTag(true)} className="label rounded-full border border-line-2 px-3 py-1.5 text-xs text-ink-dim">
-            じぶんで書く
-          </button>
-        )}
-        {suggested.map((t) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => toggleTag(t)}
-            aria-pressed={chosen.includes(t)}
-            className={`label rounded-full border px-3 py-1.5 text-xs ${chosen.includes(t) ? "border-ink bg-ink text-paper" : "border-line-2 text-ink-dim"}`}
-          >
-            #{t}
-          </button>
-        ))}
-        {!writingCw && (
-          <button type="button" onClick={() => setWritingCw(true)} className="label rounded-full border border-dashed border-line-2 px-3 py-1.5 text-xs text-ink-dim">
-            先に断る…
-          </button>
-        )}
+        {images.length < MAX_IMAGES && <button type="button" disabled={picking} onClick={() => fileRef.current?.click()} aria-label="写真を追加する" className="label flex size-11 items-center justify-center rounded-full border border-line-2 text-[17px] text-ink-dim">＋</button>}
+        <input ref={fileRef} disabled={picking} type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple onChange={(event) => void pick(event.target.files)} className="hidden" />
+        {!writingTag && <button type="button" onClick={() => setWritingTag(true)} className="label min-h-11 rounded-full border border-line-2 px-3 text-xs text-ink-dim">じぶんで書く</button>}
+        {suggested.map((tag) => <button key={tag} type="button" onClick={() => toggleTag(tag)} aria-pressed={chosen.includes(tag)} className={`label min-h-11 rounded-full border px-3 text-xs ${chosen.includes(tag) ? "border-ink bg-ink text-paper" : "border-line-2 text-ink-dim"}`}>#{tag}</button>)}
+        {!writingCw && <button type="button" onClick={() => setWritingCw(true)} className="label min-h-11 rounded-full border border-dashed border-line-2 px-3 text-xs text-ink-dim">先に断る…</button>}
       </div>
-      {writingTag && (
-        <input
-          autoFocus
-          value={tags}
-          onChange={(e) => setTags(e.target.value)}
-          maxLength={100}
-          placeholder="空白で区切る"
-          className="block w-full border-b border-line bg-transparent pb-2 text-sm placeholder:text-ink-faint focus:outline-none"
-        />
-      )}
-      {writingCw && (
-        <input name="cw" maxLength={60} autoFocus placeholder="注意文。付けると全員に対して伏せて届く" className="block w-full border-b border-line bg-transparent pb-2 text-sm placeholder:text-ink-faint focus:outline-none" />
-      )}
-
-      {declaredWords.length > 0 && (
-        <p className="label text-[11px] leading-[1.9] text-ink-faint">この箱で宣言されている語: {declaredWords.join("　")}</p>
-      )}
-
-      <div className="label flex items-center gap-3 text-[11px]">
-        {DAYS.map((d) => (
-          <button
-            key={d}
-            type="button"
-            onClick={() => setDays(d)}
-            aria-pressed={days === d}
-            className={days === d ? "text-ink underline underline-offset-4" : "text-ink-faint"}
-          >
-            {d === 7 ? "7日で消える" : `${d}日`}
-          </button>
-        ))}
-      </div>
-
-      {error && <p className="label text-[11px] text-ink">{error}</p>}
-      <button disabled={busy} className="label w-full rounded-full bg-ink py-[16px] text-sm tracking-[0.2em] text-paper disabled:opacity-50">投げる</button>
-    </form>
-  );
+      {writingTag && <><label className="sr-only" htmlFor="post-tags">タグ</label><input id="post-tags" value={tags} onChange={(event) => setDraft({ tags: event.target.value })} maxLength={100} placeholder="空白で区切る" className="block min-h-11 w-full border-b border-line bg-transparent pb-2 text-sm placeholder:text-ink-faint focus:outline-none" /></>}
+      {writingCw && <><label className="sr-only" htmlFor="post-cw">注意文</label><input id="post-cw" value={cw} onChange={(event) => setDraft({ cw: event.target.value })} maxLength={60} placeholder="注意文。付けると全員に対して伏せて届く" className="block min-h-11 w-full border-b border-line bg-transparent pb-2 text-sm placeholder:text-ink-faint focus:outline-none" /></>}
+      <fieldset className="space-y-2 border-t border-line pt-4">
+        <legend className="label text-[12px] text-ink-dim">保存先</legend>
+        <div className="flex flex-wrap gap-2">
+          {(["circle", "private"] as const).map((option) => {
+            const selected = visibility === option;
+            return <label key={option} className={`label flex min-h-11 cursor-pointer items-center rounded-full border px-4 text-xs ${selected ? "border-ink bg-ink text-paper" : "border-line-2 text-ink-dim"}`}>
+              <input type="radio" name="visibility" value={option} checked={selected} onChange={() => setDraft({ visibility: option })} className="sr-only" />
+              {option === "circle" ? "この箱に公開" : "自分だけに保存"}
+            </label>;
+          })}
+        </div>
+        <p className="text-[13px] leading-[1.9] text-ink-dim">{visibility === "private" ? "この箱には公開されず、自分の記録だけに保存します。自動で公開されることはありません。" : "この箱で読めます。公開期間が終わると、自分だけに表示されます。"}</p>
+      </fieldset>
+      {visibility === "circle" && <><div className="label flex items-center gap-3 text-[12px]">{DAYS.map((day) => <button key={day} type="button" onClick={() => setDraft({ days: day })} aria-pressed={days === day} className={`min-h-11 min-w-11 px-1 ${days === day ? "text-ink underline underline-offset-4" : "text-ink-dim"}`}>{`${day}日間公開`}</button>)}</div></>}
+    </fieldset>
+    {error && <p role="alert" className="label text-[12px] leading-[1.8] text-ink">{error}</p>}
+    <button disabled={submitDisabled} className="label min-h-11 w-full rounded-full bg-ink py-3 text-sm tracking-[0.2em] text-paper disabled:opacity-50">{picking ? "写真を準備しています…" : busy ? visibility === "private" ? "保存しています…" : "投げています…" : visibility === "private" ? "自分だけに保存" : "投げる"}</button>
+  </form>;
 }

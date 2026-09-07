@@ -1,5 +1,15 @@
 node_modules
 .next
 .git
-.env
+.env*
+.data
+.superpowers
+docs/superpowers
+.claude
+.codex
+.cursor
+CLAUDE.md
+AGENTS.md
+GEMINI.md
 lib/generated
+public/ui-preview

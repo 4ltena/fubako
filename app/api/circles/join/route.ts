@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { done, fail, readBody, requireUser } from "@/lib/api";
 import { prisma } from "@/lib/db";
 import { normalizeInvite } from "@/lib/invite";
+import { lockCircle } from "@/lib/circles";
 
 export async function POST(req: Request) {
   const userId = await requireUser();
@@ -12,18 +13,27 @@ export async function POST(req: Request) {
   // form から来たときの戻り先。外に飛ばされないよう、自分の中のパスだけを許す
   const asked = b.from ?? "/";
   const from = asked.startsWith("/") && !asked.startsWith("//") && !asked.startsWith("/\\") ? asked : "/";
-  const circle = await prisma.circle.findUnique({
-    where: { inviteCode },
-    include: { _count: { select: { memberships: true } } },
-  });
+  const circle = await prisma.circle.findUnique({ where: { inviteCode }, select: { id: true } });
   // 存在しないコードと定員超過は同じ扱い。コードの当たり外れを教えない。
   const miss = `${from}${from.includes("?") ? "&" : "?"}join=miss`;
   if (!circle) return fail(req, miss, 404, { error: "not found" });
-  const already = await prisma.membership.findUnique({ where: { userId_circleId: { userId, circleId: circle.id } } });
-  if (!already) {
-    if (circle._count.memberships >= circle.memberLimit) return fail(req, miss, 404, { error: "not found" });
-    // ponytail: 定員チェックとinsertが非原子。30人規模の競合は無視する
-    await prisma.membership.create({ data: { userId, circleId: circle.id } });
-  }
-  return done(req, `/c/${circle.id}`, { id: circle.id });
+  const joined = await prisma.$transaction(async (tx) => {
+    if (!(await lockCircle(tx, circle.id))) return null;
+    // ロック後の招待語・停止・禁止・定員を必ず読み直す。
+    const current = await tx.circle.findUnique({
+      where: { id: circle.id },
+      select: { id: true, inviteCode: true, invitesEnabled: true, memberLimit: true, _count: { select: { memberships: true } } },
+    });
+    if (!current || current.inviteCode !== inviteCode || !current.invitesEnabled) return null;
+    const [already, banned] = await Promise.all([
+      tx.membership.findUnique({ where: { userId_circleId: { userId, circleId: current.id } }, select: { userId: true } }),
+      tx.circleBan.findUnique({ where: { circleId_userId: { circleId: current.id, userId } }, select: { userId: true } }),
+    ]);
+    if (already) return current.id;
+    if (banned || current._count.memberships >= current.memberLimit) return null;
+    await tx.membership.create({ data: { userId, circleId: current.id } });
+    return current.id;
+  });
+  if (!joined) return fail(req, miss, 404, { error: "not found" });
+  return done(req, `/c/${joined}`, { id: joined });
 }

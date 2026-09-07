@@ -1,42 +1,42 @@
 "use client";
-import { useState, type ReactNode } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Blurhash } from "@/components/Blurhash";
+import { LetterPaper } from "@/components/LetterPaper";
 import type { Form } from "@/lib/form";
 import type { TimelinePost } from "@/lib/timeline";
 
-export function ImageGrid({ ids }: { ids: string[] }) {
+export function ImageGrid({ ids, imageGrant }: { ids: string[]; imageGrant?: string }) {
   const [open, setOpen] = useState<string | null>(null);
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    if (open && !dialog.open) dialog.showModal();
+    if (!open && dialog.open) dialog.close();
+  }, [open]);
   if (ids.length === 0) return null;
   return (
     <>
       <ul className={`mt-3 grid gap-1 ${ids.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
         {ids.map((id) => (
           <li key={id}>
-            <button type="button" onClick={() => setOpen(id)} className="block w-full">
+            <button type="button" onClick={() => setOpen(id)} aria-label="写真を大きく見る" className="block min-h-11 w-full">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={`/api/images/${id}`} alt="" loading="lazy" className="w-full object-cover" />
+              <img src={`/api/images/${id}${imageGrant ? `?grant=${encodeURIComponent(imageGrant)}` : ""}`} alt="" loading="lazy" className="w-full object-cover" />
             </button>
           </li>
         ))}
       </ul>
-      {open &&
-        createPortal(
-          <div
-            role="dialog"
-            aria-modal="true"
-            onClick={() => setOpen(null)}
-            className="fixed inset-0 z-30 flex items-center justify-center bg-paper/95 p-6"
-          >
+      <dialog ref={dialogRef} aria-label="写真を大きく表示" onCancel={(event) => { event.preventDefault(); setOpen(null); }} onClick={(event) => { if (event.target === event.currentTarget) setOpen(null); }} className="m-auto max-h-full max-w-full border-0 bg-paper/95 p-6 backdrop:bg-ink/20">
+          {open && <div className="relative flex max-h-[calc(100vh-3rem)] max-w-[calc(100vw-3rem)] items-center justify-center">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={`/api/images/${open}`} alt="" className="max-h-full max-w-full object-contain" />
-            <button type="button" onClick={() => setOpen(null)} className="label absolute right-6 top-6 border border-line-2 px-4 py-2 text-[11px] text-ink-dim">
+            <img src={`/api/images/${open}${imageGrant ? `?grant=${encodeURIComponent(imageGrant)}` : ""}`} alt="" className="max-h-full max-w-full object-contain" />
+            <button type="button" onClick={() => setOpen(null)} className="label absolute right-0 top-0 flex min-h-11 min-w-11 items-center justify-center border border-line-2 px-4 text-[12px] text-ink-dim">
               とじる
             </button>
-          </div>,
-          document.body,
-        )}
+          </div>}
+      </dialog>
     </>
   );
 }
@@ -45,14 +45,14 @@ export function ImageGrid({ ids }: { ids: string[] }) {
  * 本文と画像の見せ方。形（lib/form.ts）ごとに分かれるのはここだけで、
  * タイムラインもアーカイブもこれを使う（ページ側に分岐を複製しない）。
  */
-export function PostBody({ form, body, imageIds }: { form: Form; body: string; imageIds: string[] }) {
+export function PostBody({ form, body, imageIds, imageGrant }: { form: Form; body: string; imageIds: string[]; imageGrant?: string }) {
   // 一枚: 画像だけを置き、本文欄は出さない
-  if (form === "picture") return <ImageGrid ids={imageIds} />;
-  const className = form === "sentence" ? "mt-2 text-[19px] font-medium leading-[1.7]" : "mt-2 whitespace-pre-wrap text-[15px] leading-[1.9]";
+  if (form === "picture") return <ImageGrid ids={imageIds} imageGrant={imageGrant} />;
+  const className = `letter-body mt-2 whitespace-pre-wrap ${form === "sentence" ? "letter-body--sentence font-medium" : form === "verse" ? "letter-body--verse" : ""}`;
   return (
     <>
       <p className={className}>{body}</p>
-      <ImageGrid ids={imageIds} />
+      <ImageGrid ids={imageIds} imageGrant={imageGrant} />
     </>
   );
 }
@@ -71,23 +71,24 @@ function Meta({ name, at, stamp, note, trailing }: { name: string; at: string; s
 
 export function PostCard({
   post,
-  wear = 0,
   preopened = null,
   onVeiled,
+  onClosed,
 }: {
   post: TimelinePost;
   wear?: number;
-  preopened?: { body: string; imageIds: string[] } | null;
+  preopened?: { body: string; imageIds: string[]; imageGrant?: string } | null;
   onVeiled?: (postId: string) => void;
+  onClosed?: (postId: string) => void;
 }) {
-  // 開いた本文はサーバから取り直したものだけを持つ。表示は毎回 props から導く。
-  const [revealed, setRevealed] = useState<{ body: string; imageIds: string[] } | null>(null);
+  // 開いた本文はサーバから取り直したものだけを持つ。一時的に閉じても保存状態は変えない。
+  const [revealed, setRevealed] = useState<{ body: string; imageIds: string[]; imageGrant?: string } | null>(null);
   const [reacted, setReacted] = useState(post.reacted);
   const [loading, setLoading] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
-  const selfVeiled = post.veiled && post.kind === "self";
-  const opened = post.veiled ? (selfVeiled ? null : (revealed ?? preopened)) : { body: post.body, imageIds: post.imageIds };
+  const opened = post.veiled ? (revealed ?? preopened) : { body: post.body, imageIds: post.imageIds };
   const form: Form = post.veiled ? "text" : post.form;
   const similarId = post.veiled ? null : (post.similar?.postId ?? null);
   const tags = post.veiled ? [] : post.tags;
@@ -103,44 +104,58 @@ export function PostCard({
   }
   async function reveal() {
     setLoading(true);
-    const r = await fetch(`/api/posts/${post.id}/reveal`);
-    if (r.ok) setRevealed((await r.json()) as { body: string; imageIds: string[] });
-    setLoading(false);
+    setError(null);
+    try {
+      const r = await fetch(`/api/posts/${post.id}/reveal`);
+      if (r.ok) setRevealed((await r.json()) as { body: string; imageIds: string[]; imageGrant?: string });
+      else setError("ひらけませんでした。もう一度試してください。");
+    } catch { setError("通信できませんでした。もう一度試してください。"); }
+    finally { setLoading(false); }
   }
   async function react() {
+    if (loading) return;
+    setLoading(true);
     setReacted(!reacted);
-    const r = await fetch(`/api/posts/${post.id}/react`, { method: "POST" });
-    if (r.ok) setReacted(((await r.json()) as { reacted: boolean }).reacted);
+    try {
+      const r = await fetch(`/api/posts/${post.id}/react`, { method: "POST" });
+      if (r.ok) setReacted(((await r.json()) as { reacted: boolean }).reacted);
+      else setReacted(post.reacted);
+    } catch { setReacted(post.reacted); }
+    finally { setLoading(false); }
   }
   /** この紙を自分のためだけに伏せる。書き手には何も届かない。あとから戻せる。 */
   async function veilForMe() {
     setLoading(true);
     setMenuOpen(false);
-    const r = await fetch(`/api/posts/${post.id}/veil`, { method: "POST" });
-    if (r.ok) {
-      setRevealed(null);
-      onVeiled?.(post.id);
-      router.refresh();
-    }
-    setLoading(false);
+    setError(null);
+    try {
+      const r = await fetch(`/api/posts/${post.id}/veil`, { method: "POST" });
+      if (r.ok) { setRevealed(null); onVeiled?.(post.id); router.refresh(); }
+      else setError("伏せられませんでした。もう一度試してください。");
+    } catch { setError("通信できませんでした。もう一度試してください。"); }
+    finally { setLoading(false); }
   }
   async function pullBack() {
     setLoading(true);
     setMenuOpen(false);
-    const r = await fetch(`/api/posts/${post.id}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ expireNow: true }),
-    });
-    if (r.ok) router.refresh();
-    setLoading(false);
+    setError(null);
+    try {
+      const r = await fetch(`/api/posts/${post.id}`, {
+        method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ expireNow: true }),
+      });
+      if (r.ok) router.refresh(); else setError("公開を終えられませんでした。もう一度試してください。");
+    } catch { setError("通信できませんでした。もう一度試してください。"); }
+    finally { setLoading(false); }
   }
   async function unveilForMe() {
     setLoading(true);
     setMenuOpen(false);
-    const r = await fetch(`/api/posts/${post.id}/veil`, { method: "DELETE" });
-    if (r.ok) router.refresh();
-    setLoading(false);
+    setError(null);
+    try {
+      const r = await fetch(`/api/posts/${post.id}/veil`, { method: "DELETE" });
+      if (r.ok) router.refresh(); else setError("伏せを解除できませんでした。もう一度試してください。");
+    } catch { setError("通信できませんでした。もう一度試してください。"); }
+    finally { setLoading(false); }
   }
 
   const menu = (
@@ -150,29 +165,29 @@ export function PostCard({
         onClick={() => setMenuOpen(!menuOpen)}
         aria-label="この紙について"
         aria-expanded={menuOpen}
-        className="label flex size-6 items-center justify-center text-sm text-ink-faint"
+        className="label flex size-11 items-center justify-center text-sm text-ink-faint"
       >
         …
       </button>
       {menuOpen && (
         <>
           <button type="button" aria-hidden tabIndex={-1} onClick={() => setMenuOpen(false)} className="fixed inset-0 z-10 cursor-default" />
-          <span className="absolute right-0 top-7 z-20 block w-max border border-line bg-paper p-2 text-sm">
+          <span className="absolute right-0 top-11 z-20 block w-max border border-line bg-paper p-2 text-sm">
             {post.mine ? (
               post.returned ? (
                 <span className="block w-max px-4 py-3 text-ink-faint">もう他の人からは見えません</span>
               ) : (
-                <button type="button" onClick={pullBack} disabled={loading} className="block w-full px-4 py-3 text-left">
-                  いま引き取る
+                <button type="button" onClick={pullBack} disabled={loading} className="block min-h-11 w-full px-4 py-3 text-left">
+                  公開を終える
                 </button>
               )
             ) : post.veiled && post.kind === "self" ? (
-              <button type="button" onClick={unveilForMe} disabled={loading} className="block w-full px-4 py-3 text-left">
-                伏せたのを戻す
+              <button type="button" onClick={unveilForMe} disabled={loading} className="block min-h-11 w-full px-4 py-3 text-left">
+                自分の伏せを解除
               </button>
             ) : (
-              <button type="button" onClick={veilForMe} disabled={loading} className="block w-full px-4 py-3 text-left">
-                この紙をしまう
+              <button type="button" onClick={veilForMe} disabled={loading} className="block min-h-11 w-full px-4 py-3 text-left">
+                この紙を自分だけ伏せる
               </button>
             )}
           </span>
@@ -190,12 +205,13 @@ export function PostCard({
         ? "書いた人が先に断っています"
         : post.kind === "self"
           ? "自分で伏せています"
-          : "宣言した語と一致しました";
+          : "避けている語と一致しました";
   const reasonWord = post.veiled && (post.kind === "cw" || post.kind === "mute") ? post.reason : "";
 
   if (opened === null) {
     return (
       <article id={`post-${post.id}`} className="border-b border-line py-4">
+        <LetterPaper createdAt={post.createdAt}>
         <Meta name={post.authorName} at={post.createdAt} stamp={post.stamp} trailing={post.veiled && post.kind === "unconfirmed" ? undefined : menu} />
         <div className="relative mt-2 overflow-hidden bg-veil" style={{ minHeight: post.images.length > 0 ? 120 : 56 }}>
           {post.images.length > 0 && (
@@ -212,18 +228,21 @@ export function PostCard({
           </button>
         </div>
         {post.veiled && post.kind === "self" && (
-          <button onClick={unveilForMe} disabled={loading} className="label mt-2 block text-[11px] text-ink-faint underline underline-offset-4">
-            伏せたのを戻す
+          <button onClick={unveilForMe} disabled={loading} className="label mt-2 flex min-h-11 items-center px-1 text-[12px] text-ink-dim underline underline-offset-4">
+            自分の伏せを解除
           </button>
         )}
+        {error && <p role="alert" className="label mt-2 text-[12px] text-ink">{error}</p>}
+        </LetterPaper>
       </article>
     );
   }
 
   return (
-    <article id={`post-${post.id}`} className="border-b border-line py-4" style={{ opacity: 1 - wear * 0.4 }}>
-      <Meta name={post.authorName} at={post.createdAt} stamp={post.stamp} note={post.returned ? "もどってきた" : undefined} trailing={menu} />
-      <PostBody form={form} body={opened.body} imageIds={opened.imageIds} />
+    <article id={`post-${post.id}`} className="border-b border-line py-4">
+      <LetterPaper createdAt={post.createdAt}>
+      <Meta name={post.authorName} at={post.createdAt} stamp={post.stamp} note={post.returned ? "自分だけに表示" : undefined} trailing={menu} />
+      <PostBody form={form} body={opened.body} imageIds={opened.imageIds} imageGrant={opened.imageGrant} />
       {post.veiled && (
         <div className="mt-2 flex items-center gap-2.5">
           <span className="label text-[11px] leading-[1.8] text-ink-faint">
@@ -231,16 +250,16 @@ export function PostCard({
           </span>
           <button
             type="button"
-            onClick={veilForMe}
+            onClick={() => { setRevealed(null); onClosed?.(post.id); }}
             disabled={loading}
-            className="label ml-auto shrink-0 text-[11px] text-ink-faint underline underline-offset-4"
+            className="label ml-auto flex min-h-11 shrink-0 items-center px-1 text-[12px] text-ink-dim underline underline-offset-4"
           >
-            また伏せる
+            とじる
           </button>
         </div>
       )}
       {similarId && (
-        <button type="button" onClick={goToSimilar} className="label mt-2 block text-[11px] text-ink-faint underline underline-offset-4">
+        <button type="button" onClick={goToSimilar} className="label mt-2 flex min-h-11 items-center px-1 text-[12px] text-ink-dim underline underline-offset-4">
           近いことを書いた人がいます
         </button>
       )}
@@ -255,12 +274,16 @@ export function PostCard({
             onClick={react}
             aria-pressed={reacted}
             aria-label={reacted ? "届いた" : "届ける"}
-            className={`label ml-auto flex shrink-0 items-center gap-1.5 rounded-full border px-4 py-1.5 text-[12px] ${reacted ? "border-ink bg-ink text-paper" : "border-line-2 text-ink-dim"}`}
+            disabled={loading}
+            className={`label ml-auto flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-1.5 rounded-full border px-4 text-[12px] ${reacted ? "border-ink bg-ink text-paper" : "border-line-2 text-ink-dim"}`}
           >
             {reacted ? "届いた" : "届ける"}
           </button>
         )}
+        {post.mine && "received" in post && post.received && <span className="label ml-auto text-[12px] text-ink-dim">届いています</span>}
       </div>
+      {error && <p role="alert" className="label mt-2 text-[12px] text-ink">{error}</p>}
+      </LetterPaper>
     </article>
   );
 }

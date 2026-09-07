@@ -3,9 +3,14 @@ import Discord from "next-auth/providers/discord";
 import Nodemailer from "next-auth/providers/nodemailer";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/db";
+import { secureSessionAdapter } from "@/lib/auth-policy";
+
+const adapter = secureSessionAdapter(PrismaAdapter(prisma), (data) =>
+  prisma.session.create({ data }),
+);
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  adapter: PrismaAdapter(prisma),
+  adapter,
   session: { strategy: "database" },
   trustHost: true,
   // 環境変数が無い入口は組み込まない。空文字のまま渡すと Nodemailer がビルド時に AuthError を投げる

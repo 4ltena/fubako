@@ -1,11 +1,6 @@
 import type { Metadata, Viewport } from "next";
-import { M_PLUS_1_Code, Zen_Kaku_Gothic_New } from "next/font/google";
+import { ReadingPreferencesProvider } from "@/components/ReadingPreferences";
 import "./globals.css";
-
-// 「白い箱」。字は Zen Kaku Gothic New 一種、時刻だけ M PLUS 1 Code。
-// next/font が自前で配るので外部への font リクエストは出ない。
-const label = Zen_Kaku_Gothic_New({ subsets: ["latin"], weight: ["400", "500", "700"], variable: "--font-zen-kaku", display: "swap" });
-const mono = M_PLUS_1_Code({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-mplus-code", display: "swap" });
 
 // OGP は出さない。外部に本文も存在も漏らさない。
 export const metadata: Metadata = {
@@ -23,8 +18,8 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="ja" className={`h-full antialiased ${label.variable} ${mono.variable}`}>
-      <body className="min-h-full flex flex-col bg-paper text-ink">{children}</body>
+    <html lang="ja" className="h-full antialiased">
+      <body className="min-h-full flex flex-col bg-paper text-ink"><ReadingPreferencesProvider>{children}</ReadingPreferencesProvider></body>
     </html>
   );
 }

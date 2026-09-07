@@ -13,7 +13,7 @@ export default async function JoinPage({ params }: { params: Promise<{ inviteCod
   const already = await prisma.membership.findUnique({ where: { userId_circleId: { userId, circleId: circle.id } } });
   if (already) redirect(`/c/${circle.id}`);
   // 定員かどうかだけを見る。人数は画面にも出さない（README「数えない」）。
-  const full = circle._count.memberships >= circle.memberLimit;
+  const unavailable = !circle.invitesEnabled || circle._count.memberships >= circle.memberLimit;
   return (
     <main className="mx-auto w-full max-w-md flex-1 px-5 pt-16">
       <h1 className="text-2xl leading-[1.6] font-bold">入ろうとしている場</h1>
@@ -21,7 +21,7 @@ export default async function JoinPage({ params }: { params: Promise<{ inviteCod
         <span className="text-xl">{circle.name}</span>
         <p className="mt-4 text-[13px] leading-[2.1] text-ink-dim">返信欄と DM はありません。反応は一種類だけで、数は誰にも見えません。寿命が来た紙は、書いた人の箱にもどります。</p>
       </div>
-      {full ? (
+      {unavailable ? (
         <p className="mt-5 text-sm leading-[2.1] text-ink-dim">この場はもう入れません。中にいる人に聞いてみてください。</p>
       ) : (
         <form method="post" action="/api/circles/join" className="mt-5">

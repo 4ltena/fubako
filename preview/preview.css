@@ -1,0 +1,17 @@
+/* 外部フォント取得を必要としない、端末内フォントによる確認用表示。 */
+:root {
+  --font-zen-kaku: "Hiragino Sans", "Yu Gothic", sans-serif;
+  --font-mplus-code: "SF Mono", ui-monospace, monospace;
+}
+html { min-width: 320px; }
+body { margin: 0; }
+
+.letter-archive-item { list-style: none; }
+.paper-preview-controls { margin-bottom: 18px; border-bottom: 1px solid var(--color-line); font-size: 12px; color: var(--color-ink-dim); }
+.paper-preview-controls summary { min-height: 44px; cursor: pointer; padding-block: 12px; }
+.paper-preview-settings { padding: 4px 0 18px; }
+.paper-preview-settings label, .paper-preview-scale { display: flex; justify-content: space-between; gap: 12px; }
+.paper-preview-settings input { display: block; width: 100%; min-height: 44px; accent-color: #625d52; }
+.paper-preview-scale { font-size: 11px; }
+.paper-preview-settings button { min-height: 44px; margin-top: 8px; text-decoration: underline; text-underline-offset: 4px; }
+.paper-preview-settings p { line-height: 1.8; }

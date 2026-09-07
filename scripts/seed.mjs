@@ -4,6 +4,9 @@
 import "dotenv/config";
 import pg from "pg";
 import { inferForm } from "../lib/form.ts";
+import { assertLocalFixtureEnvironment } from "./local-fixture-guard.mjs";
+
+assertLocalFixtureEnvironment();
 
 const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
 await db.connect();
@@ -67,7 +70,7 @@ const base = process.env.APP_URL ?? "http://localhost:3000";
 console.log("ログイン用リンク（ブラウザに貼るだけでそのユーザーとして入る。開発時のみ有効）");
 for (const u of USERS) {
   const token = id();
-  await db.query(`INSERT INTO "Session"(id,"sessionToken","userId",expires) VALUES($1,$2,$3,$4)`, [id(), token, users[u.email], days(30)]);
+  await db.query(`INSERT INTO "Session"(id,"sessionToken","userId",expires,"authMethod") VALUES($1,$2,$3,$4,'demo')`, [id(), token, users[u.email], days(30)]);
   console.log(`  ${u.name.padEnd(4, "　")} ${u.email.padEnd(22)} ${base}/api/dev/login?token=${token}`);
 }
 await db.end();
