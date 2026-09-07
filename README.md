@@ -137,7 +137,7 @@ npm test                # 判定・認証・API・下書き・記録などのテ
 npm run typecheck && npm run lint
 npm run contrast
 npm run test:migrations # プロセス内DBで全移行と既存データの保持を検証
-npm run build           # 本番ビルド。簡易ログインは利用不可
+npm run build           # 本番ビルド。簡易ログインは既定で利用不可
 DEV_LOGIN=1 npm run dev # ローカル検証用。別ターミナルで起動
 NODE_ENV=development DEV_LOGIN=1 npm run smoke # ローカルDBと起動中の開発サーバだけで通し検証
 NODE_ENV=development DEV_LOGIN=1 npm run seed  # ローカルDBに仮データと開発用ログインリンクを作成
@@ -158,6 +158,7 @@ ANTHROPIC_API_KEY=      # Phase 5以降のみ
 BLOB_READ_WRITE_TOKEN=  # 未設定ならローカル保存
 DEV_LOGIN=              # 1 で未ホストの next dev だけ開発用リンクを許可
 PASSWORD_LOGIN=         # 1 で未ホストの next dev だけ名前によるテスト入口を許可
+PUBLIC_DEMO_LOGIN=      # 公開テスト専用。PASSWORD_LOGIN=1 と両方設定した場合だけ公開環境でも許可
 ```
 
 ---
@@ -186,7 +187,7 @@ PASSWORD_LOGIN=         # 1 で未ホストの next dev だけ名前によるテ
 
 Docker（Render / Fly.io / VPS）で動かす場合はイメージビルド時に `DATABASE_URL` が無いため、マイグレーションはビルドに含めていない。デプロイ前に `npx prisma migrate deploy` を実行してから `npm start` すること。
 
-本番・プレビューでは `PASSWORD_LOGIN=1` や `DEV_LOGIN=1` が残っていても簡易入口と簡易セッションを拒否する。名前だけの入口を公開環境の認証として利用しない。
+本番・プレビューでは `PASSWORD_LOGIN=1` や `DEV_LOGIN=1` だけでは簡易入口と簡易セッションを拒否する。テスト専用DBを使った公開デモに限り、`PASSWORD_LOGIN=1` と `PUBLIC_DEMO_LOGIN=1` の両方で名前による入口を許可できる。同じ名前を知る人が同じアカウントに入れるため、実利用者のデータがあるDBでは有効にしない。設定を外して再デプロイするとdemoセッションも拒否する。開発リンクは公開デモでも利用できない。[公開テストの設定](docs/deployment.md#公開テスト用の名前ログイン)を参照。
 
 ---
 

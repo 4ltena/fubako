@@ -46,6 +46,9 @@ function validSmtpUrl(raw) {
  */
 export function validateDeployEnvironment(env = process.env, options = {}) {
   const errors = [];
+  if (value(env, "PUBLIC_DEMO_LOGIN") === "1") {
+    errors.push("PUBLIC_DEMO_LOGIN は公開テスト専用です。本番運用では無効にしてください");
+  }
   const target = options.target ?? value(env, "DEPLOY_TARGET");
   if (!TARGETS.has(target)) {
     errors.push("DEPLOY_TARGET は vercel または docker を明示してください");

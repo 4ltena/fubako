@@ -21,6 +21,12 @@ test("Vercel の完全な環境値を許可する", () => {
   assert.deepEqual(validateDeployEnvironment(valid), { ok: true, errors: [] });
 });
 
+test("公開テスト用ログインの設定を本番運用として許可しない", () => {
+  const result = validateDeployEnvironment({ ...valid, PASSWORD_LOGIN: "1", PUBLIC_DEMO_LOGIN: "1" });
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some((message) => message.includes("PUBLIC_DEMO_LOGIN")));
+});
+
 test("必須値が無い環境を成功として扱わない", () => {
   const result = validateDeployEnvironment({ DEPLOY_TARGET: "vercel" });
   assert.equal(result.ok, false);

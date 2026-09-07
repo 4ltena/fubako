@@ -30,10 +30,11 @@ export function isUnhostedNextDevelopment(env: RuntimeEnvironment = process.env)
 /** 簡易入口は環境ごとではなく入口ごとの明示フラグで開く。 */
 export function isTemporaryLoginAllowed(kind: "password" | "dev", env: RuntimeEnvironment = process.env): boolean {
   const flag = kind === "password" ? env.PASSWORD_LOGIN : env.DEV_LOGIN;
-  return flag === "1" && isUnhostedNextDevelopment(env);
+  const publicDemo = kind === "password" && env.PUBLIC_DEMO_LOGIN === "1";
+  return flag === "1" && (isUnhostedNextDevelopment(env) || publicDemo);
 }
 
-/** 通常認証は常に通し、demo は明示的に許可したローカル開発時だけ通す。 */
+/** demo はローカル開発または明示的に有効化した公開テストだけで通す。 */
 export function acceptsSessionAuthMethod(authMethod: unknown, env: RuntimeEnvironment = process.env): boolean {
   return authMethod === "verified" || (
     authMethod === "demo" &&
