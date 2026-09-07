@@ -8,8 +8,9 @@ import { isTemporaryLoginAllowed } from "@/lib/auth-policy";
 const SESSION_DAYS = 30;
 
 /**
- * テスト用のログイン。`PASSWORD_LOGIN=1` のときだけ有効で、名前だけで入る。
- * 未登録の名前はその場でアカウントを作る。パスワード欄は画面に網掛けで残すだけ。Auth.js の Credentials は使わず、
+ * テスト用のログイン。`PASSWORD_LOGIN=1` のローカル開発、または
+ * `PUBLIC_DEMO_LOGIN=1` も明示した公開テストで、名前だけで入る。
+ * 未登録の名前はその場でアカウントを作る。Auth.js の Credentials は使わず、
  * 開発用ログイン（/api/dev/login）と同じ形で Session 行を作って Cookie を載せる。
  *
  * 外部サイトからの自動 POST（ログイン CSRF）は、Origin か Sec-Fetch-Site で同一オリジンを確かめて弾く。

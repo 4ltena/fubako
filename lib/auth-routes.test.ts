@@ -12,7 +12,7 @@ const passwordRoute = await import("@/app/api/auth/password/route");
 const devRoute = await import("@/app/api/dev/login/route");
 
 function setEnv(values: Record<string, string | undefined>) {
-  const keys = ["NODE_ENV", "PASSWORD_LOGIN", "DEV_LOGIN", "VERCEL_ENV", "VERCEL", "NETLIFY"] as const;
+  const keys = ["NODE_ENV", "PASSWORD_LOGIN", "PUBLIC_DEMO_LOGIN", "DEV_LOGIN", "VERCEL_ENV", "VERCEL", "NETLIFY"] as const;
   for (const key of keys) {
     vi.stubEnv(key, values[key]);
   }
@@ -22,6 +22,40 @@ function setEnv(values: Record<string, string | undefined>) {
 describe("簡易ログインRouteの早期拒否", () => {
   beforeEach(() => vi.clearAllMocks());
   afterEach(() => vi.unstubAllEnvs());
+
+  it("公開テストでは名前でdemoを発行し、Secure Cookieでログインする", async () => {
+    setEnv({ NODE_ENV: "production", PASSWORD_LOGIN: "1", PUBLIC_DEMO_LOGIN: "1", VERCEL: "1" });
+    db.user.findUnique.mockResolvedValue({ id: "u1" });
+    db.session.create.mockImplementation(async ({ data }) => data);
+    const response = await passwordRoute.POST(new Request("https://fubako.example/api/auth/password", {
+      method: "POST",
+      headers: { origin: "https://fubako.example", "sec-fetch-site": "same-origin" },
+      body: new URLSearchParams({ handle: "rin" }),
+    }));
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("https://fubako.example/");
+    expect(response.headers.get("set-cookie")).toContain("Secure");
+    expect(response.headers.get("set-cookie")).toContain("HttpOnly");
+    expect(db.session.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ userId: "u1", authMethod: "demo" }) }));
+  });
+
+  it("公開テストでも他サイトからのログインをDBアクセス前に拒否する", async () => {
+    setEnv({ NODE_ENV: "production", PASSWORD_LOGIN: "1", PUBLIC_DEMO_LOGIN: "1" });
+    const response = await passwordRoute.POST(new Request("https://fubako.example/api/auth/password", {
+      method: "POST", headers: { origin: "https://other.example" },
+      body: new URLSearchParams({ handle: "rin" }),
+    }));
+    expect(response.status).toBe(403);
+    expect(db.user.findUnique).not.toHaveBeenCalled();
+    expect(db.session.create).not.toHaveBeenCalled();
+  });
+
+  it("公開テストでも開発リンクは拒否する", async () => {
+    setEnv({ NODE_ENV: "production", PASSWORD_LOGIN: "1", PUBLIC_DEMO_LOGIN: "1", DEV_LOGIN: "1" });
+    const response = await devRoute.GET(new Request("https://fubako.example/api/dev/login?token=demo"));
+    expect(response.status).toBe(404);
+    expect(db.session.findUnique).not.toHaveBeenCalled();
+  });
 
   it("パスワード入口は本番でDBへ触れない", async () => {
     const restore = setEnv({ NODE_ENV: "production", PASSWORD_LOGIN: "1" });

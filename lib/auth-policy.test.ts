@@ -12,6 +12,9 @@ describe("簡易認証の環境境界", () => {
     ["未ホストの開発でDEV_LOGIN=1", { NODE_ENV: "development", DEV_LOGIN: "1" }, "dev", true],
     ["別入口のフラグだけ", { NODE_ENV: "development", PASSWORD_LOGIN: "1" }, "dev", false],
     ["productionはフラグに関わらず拒否", { NODE_ENV: "production", PASSWORD_LOGIN: "1", DEV_LOGIN: "1" }, "password", false],
+    ["公開テストは二つのフラグで許可", { NODE_ENV: "production", VERCEL: "1", PASSWORD_LOGIN: "1", PUBLIC_DEMO_LOGIN: "1" }, "password", true],
+    ["公開テストフラグだけでは拒否", { NODE_ENV: "production", PUBLIC_DEMO_LOGIN: "1" }, "password", false],
+    ["公開テストでも開発リンクは拒否", { NODE_ENV: "production", DEV_LOGIN: "1", PASSWORD_LOGIN: "1", PUBLIC_DEMO_LOGIN: "1" }, "dev", false],
     ["previewはフラグに関わらず拒否", { NODE_ENV: "development", PASSWORD_LOGIN: "1", VERCEL_ENV: "preview" }, "password", false],
     ["hosted環境はフラグに関わらず拒否", { NODE_ENV: "development", DEV_LOGIN: "1", NETLIFY: "true" }, "dev", false],
     ["実行環境が不明なら拒否", { PASSWORD_LOGIN: "1" }, "password", false],
@@ -27,6 +30,14 @@ describe("簡易認証の環境境界", () => {
 });
 
 describe("セッションの出所", () => {
+  it("公開テストの明示許可中だけdemoを通し、解除後とlegacyは拒否する", () => {
+    const env = { NODE_ENV: "production", PASSWORD_LOGIN: "1", PUBLIC_DEMO_LOGIN: "1" };
+    expect(acceptsSessionAuthMethod("demo", env)).toBe(true);
+    expect(acceptsSessionAuthMethod("legacy", env)).toBe(false);
+    expect(acceptsSessionAuthMethod("unknown", env)).toBe(false);
+    expect(acceptsSessionAuthMethod("demo", { ...env, PUBLIC_DEMO_LOGIN: "" })).toBe(false);
+    expect(acceptsSessionAuthMethod("demo", { ...env, PASSWORD_LOGIN: "" })).toBe(false);
+  });
   it("許可されない環境では verified だけを通す", () => {
     const production = { NODE_ENV: "production" };
     expect(acceptsSessionAuthMethod("verified", production)).toBe(true);
