@@ -14,7 +14,7 @@ import { isVisibleTo } from "@/lib/visibility";
 async function target(userId: string, id: string) {
   const post = await prisma.post.findUnique({
     where: { id },
-    select: { id: true, circleId: true, authorId: true, expiresAt: true, deletedAt: true },
+    select: { id: true, circleId: true, authorId: true, visibility: true, expiresAt: true, deletedAt: true },
   });
   if (!post || post.authorId === userId || !isVisibleTo(post, userId) || !(await isMember(userId, post.circleId))) return null;
   return post;

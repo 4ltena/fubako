@@ -7,13 +7,14 @@
   --color-line: #e6e6e2;    /* 罫 */
   --color-line-2: #d4d4cf;  /* ボタンの縁 */
   --color-ink: #1a1a1a;     /* 字、墨のボタン */
-  --color-ink-dim: #6b6b66; /* 補助の字 */
-  --color-ink-faint: #8a8a84; /* 時刻、プレースホルダ */
+  --color-ink-dim: #5f5f5b; /* 補助の字 */
+  --color-ink-faint: #6e6e69; /* 時刻、プレースホルダ */
   --color-veil: #ececea;    /* 伏せ字の面 */
   --color-veil-ink: #4a4a46; /* 伏せ字の面の字 */
 
-  --font-label: var(--font-zen-kaku), "Hiragino Sans", "Yu Gothic", sans-serif;
-  --font-mono: var(--font-mplus-code), "SF Mono", ui-monospace, monospace;
+  --font-label: "Hiragino Sans", "Yu Gothic", "YuGothic", system-ui, sans-serif;
+  --font-mono: "SF Mono", "Hiragino Sans", ui-monospace, monospace;
+  --font-letter: "Hiragino Mincho ProN", "Yu Mincho", "YuMincho", "HGS明朝E", serif;
 }
 
 :root {
@@ -38,9 +39,63 @@ body {
   font-family: var(--font-mono);
 }
 
+.letter-paper {
+  --letter-paper: color-mix(in srgb, #fffdf5 calc(100% - var(--paper-age)), #e8d9ad var(--paper-age));
+  --letter-ink: color-mix(in srgb, var(--color-ink) calc(100% - (var(--paper-age) * .20)), #685c45 calc(var(--paper-age) * .20));
+  position: relative;
+  overflow: visible;
+  margin-top: .5rem;
+  padding: 1.25rem 1.125rem 1.35rem;
+  border: 1px solid color-mix(in srgb, #9d8a5f 38%, transparent);
+  border-radius: .15rem;
+  background-color: var(--letter-paper);
+  background-image: radial-gradient(ellipse at 14% 8%, rgb(164 128 62 / calc(var(--paper-age) * .08)), transparent 42%), radial-gradient(ellipse at 88% 94%, rgb(130 95 40 / calc(var(--paper-age) * .08)), transparent 42%), repeating-linear-gradient(to bottom, transparent 0, transparent 1.9rem, rgb(109 95 64 / var(--paper-rule-alpha)) 1.94rem, transparent 1.98rem);
+  box-shadow: 0 .1rem .35rem rgb(56 45 26 / .08);
+}
+
+.letter-paper--plain {
+  background-image: none;
+}
+
+.letter-paper .letter-body {
+  color: var(--letter-ink);
+  font-family: var(--font-letter);
+  font-size: calc(1rem * var(--letter-font-scale, 1));
+  line-height: 2;
+  letter-spacing: .035em;
+}
+
+.letter-paper .letter-body--sentence {
+  font-size: calc(1.22rem * var(--letter-font-scale, 1));
+  line-height: 1.8;
+}
+
+.letter-paper .letter-body--verse {
+  text-align: center;
+  line-height: 2.15;
+}
+
+.reading-preferences[data-reading-font="large"] .letter-paper {
+  --letter-font-scale: 1.18;
+}
+
+.reading-preferences[data-reading-font="large"] .letter-paper .label {
+  font-size: calc(1em * 1.12);
+}
+
+@media (max-width: 375px) {
+  .letter-paper {
+    padding: 1rem;
+  }
+}
+
 :focus-visible {
   outline: 2px solid var(--color-ink);
   outline-offset: 2px;
+}
+
+button, input, textarea, summary {
+  touch-action: manipulation;
 }
 ::selection {
   background: color-mix(in srgb, var(--color-ink) 20%, transparent);

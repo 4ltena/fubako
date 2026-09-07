@@ -3,6 +3,7 @@ import { sessionCookieName } from "@/lib/api";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { normalizeHandle } from "@/lib/handle";
+import { isTemporaryLoginAllowed } from "@/lib/auth-policy";
 
 const SESSION_DAYS = 30;
 
@@ -18,7 +19,7 @@ const SESSION_DAYS = 30;
  * 発表後に PASSWORD_LOGIN を外して閉じる前提のテスト用の入口。
  */
 export async function POST(req: Request) {
-  if (process.env.PASSWORD_LOGIN !== "1") {
+  if (!isTemporaryLoginAllowed("password")) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
   if (!sameOrigin(req)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
@@ -43,7 +44,7 @@ function sameOrigin(req: Request): boolean {
 
 async function signIn(req: Request, userId: string) {
   const expires = new Date(Date.now() + SESSION_DAYS * 86400_000);
-  const session = await prisma.session.create({ data: { sessionToken: randomUUID(), userId, expires } });
+  const session = await prisma.session.create({ data: { sessionToken: randomUUID(), userId, expires, authMethod: "demo" } });
   const res = NextResponse.redirect(new URL("/", req.url), 303);
   res.cookies.set(sessionCookieName(req), session.sessionToken, {
     httpOnly: true,

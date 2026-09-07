@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { done, requireUser } from "@/lib/api";
 import { prisma } from "@/lib/db";
@@ -7,7 +7,8 @@ import { ACCEPTED_TYPES, processImage } from "@/lib/image";
 import { extractTerms, RECENT_BODIES } from "@/lib/similar";
 import { deleteObject, putObject } from "@/lib/storage";
 import { isMember, timelineFor } from "@/lib/timeline";
-import { defaultExpiresAt, DEFAULT_LIFETIME_MS } from "@/lib/visibility";
+import { DEFAULT_LIFETIME_MS } from "@/lib/visibility";
+import { normalizeWord } from "@/lib/veil";
 
 const MAX_REQUEST_BYTES = 4 * 1024 * 1024;
 
@@ -52,7 +53,7 @@ export async function GET(req: Request) {
   return NextResponse.json({ posts });
 }
 
-export function parseTags(raw: string): string[] {
+function parseTags(raw: string): string[] {
   return [...new Set(raw.split(/[\s,、]+/).map((t) => t.replace(/^#/, "").trim()).filter(Boolean))].slice(0, 10);
 }
 
@@ -64,12 +65,12 @@ export function parseTags(raw: string): string[] {
 async function termsFor(userId: string, circleId: string, body: string, tags: string[]): Promise<string[]> {
   const [recent, tagRows] = await Promise.all([
     prisma.post.findMany({
-      where: { authorId: userId, circleId, deletedAt: null, expiresAt: { gt: new Date() } },
+      where: { authorId: userId, circleId, visibility: "circle", deletedAt: null, expiresAt: { gt: new Date() } },
       orderBy: { createdAt: "desc" },
       take: RECENT_BODIES,
       select: { body: true },
     }),
-    prisma.post.findMany({ where: { circleId, deletedAt: null }, orderBy: { createdAt: "desc" }, take: 200, select: { tags: true } }),
+    prisma.post.findMany({ where: { circleId, visibility: "circle", deletedAt: null }, orderBy: { createdAt: "desc" }, take: 200, select: { tags: true } }),
   ]);
   const circleTags = [...new Set([...tags, ...tagRows.flatMap((r) => r.tags)])];
   return extractTerms(body, recent.map((r) => r.body), { terms: circleTags });
@@ -85,8 +86,19 @@ export async function POST(req: Request) {
   const bodyReq = new Request(req.url, { method: "POST", headers: req.headers, body: raw });
 
   const isForm = !(req.headers.get("content-type") ?? "").includes("json");
-  const fd = isForm ? await bodyReq.formData() : null;
-  const b = fd ? Object.fromEntries([...fd.entries()].filter(([, v]) => typeof v === "string").map(([k, v]) => [k, String(v)])) : ((await bodyReq.json()) as Record<string, string>);
+  let fd: FormData | null;
+  let b: Record<string, string>;
+  try {
+    fd = isForm ? await bodyReq.formData() : null;
+    const parsed = fd ? Object.fromEntries([...fd.entries()].filter(([, v]) => typeof v === "string")) : await bodyReq.json();
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("body");
+    for (const field of ["body", "cw", "tags", "circleId", "clientRequestId", "visibility"]) {
+      if (parsed[field] !== undefined && typeof parsed[field] !== "string") throw new Error(field);
+    }
+    b = parsed as Record<string, string>;
+  } catch {
+    return NextResponse.json({ error: "body" }, { status: 400 });
+  }
   const files = fd ? fd.getAll("images").filter((f): f is File => f instanceof File && f.size > 0) : [];
 
   const body = (b.body ?? "").trim();
@@ -96,51 +108,91 @@ export async function POST(req: Request) {
   const cw = (b.cw ?? "").trim().slice(0, 60) || null;
   if (files.some((f) => !ACCEPTED_TYPES.has(f.type))) return NextResponse.json({ error: "image type" }, { status: 400 });
   const circleId = b.circleId ?? "";
+  const visibility = b.visibility ?? "circle";
+  if (visibility !== "circle" && visibility !== "private") return NextResponse.json({ error: "visibility" }, { status: 400 });
   if (!(await isMember(userId, circleId))) return NextResponse.json({ error: "not found" }, { status: 404 });
+
+  const clientRequestId = b.clientRequestId ?? "";
+  if (!/^[a-zA-Z0-9_-]{16,80}$/.test(clientRequestId)) {
+    return NextResponse.json({ error: "clientRequestId" }, { status: 400 });
+  }
 
   const now = new Date();
   // 寿命は既定 7 日。それより短い指定だけ受ける（原則 B）。
   const days = Number(b.days);
-  const requested = Number.isFinite(days) && days > 0 ? new Date(now.getTime() + days * 86400_000) : defaultExpiresAt(now);
-  const expiresAt = new Date(Math.min(requested.getTime(), now.getTime() + DEFAULT_LIFETIME_MS));
+  const lifetime = Number.isFinite(days) && days > 0 ? Math.min(days * 86400_000, DEFAULT_LIFETIME_MS) : DEFAULT_LIFETIME_MS;
+  const expiresAt = new Date(now.getTime() + lifetime);
 
   let processed: Awaited<ReturnType<typeof processImage>>[];
+  let imageBytes: Buffer[];
   try {
-    processed = await Promise.all(files.map(async (f) => processImage(Buffer.from(await f.arrayBuffer()))));
+    imageBytes = await Promise.all(files.map(async (f) => Buffer.from(await f.arrayBuffer())));
+    processed = await Promise.all(imageBytes.map((bytes) => processImage(bytes)));
   } catch {
     return NextResponse.json({ error: "image" }, { status: 400 });
   }
 
   const tags = parseTags(b.tags ?? "");
-  // 語の抽出は作成時に1回だけ。MeCab が無ければ terms は空になり、近い投稿の行が出ないだけ。
+  // 語の抽出は作成時に1回。辞書が使えない場合も投稿は続けられる。
   const terms = await termsFor(userId, circleId, body, tags);
-
-  const post = await prisma.post.create({
-    // 形は書き手に選ばせず本文と画像から決める（原則 A）。
-    data: { circleId, authorId: userId, body, cw, tags, expiresAt, form: inferForm(body, files.length), terms },
-  });
+  const requestHash = createHash("sha256").update(JSON.stringify({
+    circleId, body, cw, visibility, tags: [...new Set(tags.map(normalizeWord))].sort(), lifetime,
+    images: imageBytes.map((bytes) => createHash("sha256").update(bytes).digest("hex")),
+  })).digest("hex");
   const uploadedKeys: string[] = [];
+  let attemptedPostId: string | null = null;
   try {
-    for (const img of processed) {
-      const image = await prisma.image.create({
-        data: { postId: post.id, key: `pending/${randomUUID()}`, blurhash: img.blurhash, width: img.width, height: img.height, bytes: img.webp.byteLength },
+    const result = await prisma.$transaction(async (tx) => {
+      // 参加取消・退出と同じ箱行を先にロックし、取消後の投稿を通さない。
+      await tx.$queryRaw`SELECT id FROM "Circle" WHERE id = ${circleId} FOR UPDATE`;
+      const membership = await tx.membership.findUnique({ where: { userId_circleId: { userId, circleId } } });
+      if (!membership) return { status: 404 as const };
+      // 保存前に同じ送信を直列化する。ハッシュの衝突は余分に待つだけで混同しない。
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${userId}), hashtext(${clientRequestId}))`;
+      const existing = await tx.post.findUnique({ where: { authorId_clientRequestId: { authorId: userId, clientRequestId } }, select: { id: true, requestHash: true, deletedAt: true, visibility: true } });
+      if (existing) return existing.requestHash === requestHash && !existing.deletedAt ? { status: 200 as const, id: existing.id, visibility: existing.visibility } : { status: 409 as const };
+      const id = randomUUID();
+      attemptedPostId = id;
+      const images = [];
+      for (const img of processed) {
+        const imageId = randomUUID();
+        const key = `images/${id}/${imageId}.webp`;
+        // 書き込み後にエラーとなる保存先でも、その試行のキーを回収できるよう先に記録する。
+        uploadedKeys.push(key);
+        await putObject(key, img.webp);
+        images.push({ id: imageId, key, blurhash: img.blurhash, width: img.width, height: img.height, bytes: img.webp.byteLength });
+      }
+      const post = await tx.post.create({
+        data: { id, circleId, authorId: userId, body, cw, tags, visibility, expiresAt, form: inferForm(body, files.length), terms, clientRequestId, requestHash, images: { create: images } },
+        select: { id: true, visibility: true },
       });
-      const key = `images/${post.id}/${image.id}.webp`;
-      await putObject(key, img.webp);
-      uploadedKeys.push(key);
-      await prisma.image.update({ where: { id: image.id }, data: { key } });
-    }
+      return { status: 200 as const, id: post.id, visibility: post.visibility };
+    }, { maxWait: 15000, timeout: 60000 });
+    if (result.status !== 200) return NextResponse.json({ error: result.status === 409 ? "request conflict" : "not found" }, { status: result.status });
+    if (result.visibility === "private") return done(req, "/archive", { id: result.id, redirectTo: "/archive" });
+    return done(req, `/c/${circleId}`, { id: result.id });
   } catch (err) {
-    // 保存先の失敗で投稿だけ残ると、クライアントは失敗と誤解して再送し二重投稿になる。
-    // 投稿ごと消して最初からやり直せるようにする（Image は Post に cascade）。
+    // COMMIT直後の通信断もあり得る。保存の有無を確認できない間は画像を消さない。
+    let canClean = attemptedPostId === null;
+    if (attemptedPostId) {
+      try {
+        const saved = await prisma.post.findUnique({ where: { id: attemptedPostId }, select: { id: true, deletedAt: true, visibility: true } });
+        if (saved && !saved.deletedAt) {
+          if (saved.visibility === "private") return done(req, "/archive", { id: saved.id, redirectTo: "/archive" });
+          return done(req, `/c/${circleId}`, { id: saved.id });
+        }
+        canClean = !saved;
+      } catch {
+        console.error(JSON.stringify({ event: "post_save_outcome_unknown", postId: attemptedPostId, keys: uploadedKeys }));
+      }
+    }
+    // ロールバックを確認できた場合だけ、この試行のキーを回収する。
     await Promise.all(
-      uploadedKeys.map((key) =>
-        deleteObject(key).catch((e) => console.error(JSON.stringify({ event: "image_upload_cleanup_failed", postId: post.id, key, error: String(e) }))),
+      (canClean ? uploadedKeys : []).map((key) =>
+        deleteObject(key).catch((e) => console.error(JSON.stringify({ event: "image_upload_cleanup_failed", key, error: String(e) }))),
       ),
     );
-    await prisma.post.delete({ where: { id: post.id } });
-    console.error(JSON.stringify({ event: "image_upload_failed", postId: post.id, error: String(err) }));
+    console.error(JSON.stringify({ event: "post_save_failed", error: String(err) }));
     return NextResponse.json({ error: "image upload failed" }, { status: 502 });
   }
-  return done(req, `/c/${circleId}`, { id: post.id });
 }

@@ -3,25 +3,26 @@ import { InviteBoxes } from "@/components/InviteBoxes";
 import { boxColor } from "@/lib/boxColor";
 import { currentUserId, signOut } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { DigestPreference } from "@/components/DigestPreference";
 
 export default async function CirclesPage({ searchParams }: { searchParams: Promise<{ join?: string }> }) {
   const userId = (await currentUserId())!;
   const missed = (await searchParams).join === "miss";
   const now = new Date();
-  const memberships = await prisma.membership.findMany({
+  const [memberships, user] = await Promise.all([prisma.membership.findMany({
     where: { userId },
     include: {
       circle: {
         include: {
           // 紙が置かれた新しい順に並べるためだけに1枚だけ見る。件数も名前も出さない
-          posts: { where: { deletedAt: null, expiresAt: { gt: now } }, orderBy: { createdAt: "desc" }, take: 1, select: { createdAt: true } },
+          posts: { where: { visibility: "circle", deletedAt: null, expiresAt: { gt: now } }, orderBy: { createdAt: "desc" }, take: 1, select: { createdAt: true } },
         },
       },
     },
     orderBy: { joinedAt: "desc" },
-  });
+  }), prisma.user.findUnique({ where: { id: userId }, select: { digestEnabled: true } })]);
   // 新しい紙がある箱が上。文言では何も言わない（急かさない）
-  const boxes = memberships
+  const boxes = memberships.filter((membership) => !membership.archivedAt)
     .map((m) => ({ circle: m.circle, at: m.circle.posts[0]?.createdAt ?? m.joinedAt }))
     .sort((a, b) => b.at.getTime() - a.at.getTime());
   return (
@@ -46,6 +47,17 @@ export default async function CirclesPage({ searchParams }: { searchParams: Prom
         ))}
       </ul>
 
+      {memberships.some((membership) => membership.archivedAt) && (
+        <details className="mt-7 border-t border-line pt-4">
+          <summary className="label min-h-11 cursor-pointer py-3 text-[11px] text-ink-faint">しまった箱</summary>
+          <ul>
+            {memberships.filter((membership) => membership.archivedAt).map((membership) => (
+              <li key={membership.circleId} className="border-b border-line"><Link href={`/c/${membership.circleId}`} className="flex min-h-11 items-center py-3 text-[15px] text-ink-dim">{membership.circle.name}</Link></li>
+            ))}
+          </ul>
+        </details>
+      )}
+
       <div className="mt-8">
         <span className="label text-[11px] text-ink-dim">もらった言葉を入れる</span>
         <div className="mt-3">
@@ -62,6 +74,7 @@ export default async function CirclesPage({ searchParams }: { searchParams: Prom
       <form className="mt-8" action={async () => { "use server"; await signOut({ redirectTo: "/login" }); }}>
         <button className="label text-[11px] text-ink-faint underline underline-offset-4">ログアウト</button>
       </form>
+      {user && <div className="mt-6"><DigestPreference initiallyEnabled={user.digestEnabled} /></div>}
     </div>
   );
 }

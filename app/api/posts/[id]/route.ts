@@ -14,6 +14,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
   const post = await prisma.post.findFirst({ where: { id, authorId: userId, deletedAt: null } });
   if (!post) return NextResponse.json({ error: "not found" }, { status: 404 });
   const b = await readBody(req);
+  if (Object.hasOwn(b, "visibility")) return NextResponse.json({ error: "visibility" }, { status: 400 });
   const requested = b.expireNow ? new Date() : new Date(b.expiresAt ?? "");
   if (Number.isNaN(requested.getTime())) return NextResponse.json({ error: "expiresAt" }, { status: 400 });
   const expiresAt = shortenExpiry(post.expiresAt, requested);

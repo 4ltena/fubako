@@ -16,6 +16,7 @@
 # next.js
 /.next/
 /out/
+/public/ui-preview/
 
 # production
 /build
@@ -43,6 +44,7 @@ next-env.d.ts
 !.env.example
 /lib/generated
 /.superpowers
+/docs/superpowers/
 /.data
 
 # エージェント指示ファイルは運用文脈であり成果物ではない

@@ -1,36 +1,22 @@
-// 面どうし・字と面の対比を数える。app/globals.css の値を変えたらここも直して走らせる。
-//   node scripts/contrast.mjs
-// 目安: 本文と小さい字は 4.5 以上、プレースホルダは 3 以上。数字は WCAG のコントラスト比。
-const hex = (h) => [1,3,5].map(i => parseInt(h.slice(i,i+2),16)/255);
-const lin = (c) => c <= 0.03928 ? c/12.92 : ((c+0.055)/1.055)**2.4;
-const L = (h) => { const [r,g,b] = hex(h).map(lin); return 0.2126*r + 0.7152*g + 0.0722*b; };
-const ratio = (a,b) => { const l1=L(a), l2=L(b); const [hi,lo]=l1>l2?[l1,l2]:[l2,l1]; return (hi+0.05)/(lo+0.05); };
+import { readFileSync } from "node:fs";
 
-// 「白い箱」トークン（app/globals.css の @theme と一致させる）
-const t = {
-  paper: "#fbfbfa",
-  paper2: "#f3f3f1",
-  line: "#e6e6e2",
-  line2: "#d4d4cf",
-  ink: "#1a1a1a",
-  inkDim: "#6b6b66",
-  inkFaint: "#8a8a84",
-  veil: "#ececea",
-  veilInk: "#4a4a46",
-};
-
-const pairs = [
-  ["字: 本文 / 地", "ink", "paper", 4.5],
-  ["字: 補助の字 / 地", "inkDim", "paper", 4.5],
-  ["字: 薄い字(プレースホルダ) / 地", "inkFaint", "paper", 3.0],
-  ["字: 伏せ字の面の字 / 伏せ字の面", "veilInk", "veil", 4.5],
-  ["面: タブの帯 / 地", "paper2", "paper", 1.05],
-  ["ボタン: 地色の字 / 墨のボタン", "paper", "ink", 4.5],
-];
-
-console.log("\n===== 白い箱 =====");
-for (const [name, a, b, min] of pairs) {
-  const r = ratio(t[a], t[b]);
-  const ok = r >= min;
-  console.log(`${ok ? "  " : "NG"} ${name.padEnd(28)} ${r.toFixed(2).padStart(6)}  (目安 ${min})`);
-}
+const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+const tokens = Object.fromEntries([...css.matchAll(/--color-([\w-]+):\s*(#[0-9a-fA-F]{6})/g)].map(([, name, value]) => [name, value]));
+const required = ["paper", "paper-2", "line", "line-2", "ink", "ink-dim", "ink-faint", "veil", "veil-ink"];
+for (const key of required) if (!tokens[key]) throw new Error(`globals.css に --color-${key} がありません`);
+const hex = (value) => [1, 3, 5].map((i) => Number.parseInt(value.slice(i, i + 2), 16) / 255);
+const linear = (value) => value <= .03928 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4;
+const luminance = (value) => { const [r, g, b] = hex(value).map(linear); return .2126 * r + .7152 * g + .0722 * b; };
+const ratio = (a, b) => { const [high, low] = [luminance(a), luminance(b)].sort((x, y) => y - x); return (high + .05) / (low + .05); };
+const pairs = [["本文 / 地", "ink", "paper", 4.5], ["補助文字 / 地", "ink-dim", "paper", 4.5], ["薄い文字 / 地", "ink-faint", "paper", 4.5], ["伏せ文字 / 伏せ面", "veil-ink", "veil", 4.5], ["紙色の文字 / 墨", "paper", "ink", 4.5], ["帯 / 地", "paper-2", "paper", 1.05]];
+let failed = false;
+for (const [name, foreground, background, minimum] of pairs) { const value = ratio(tokens[foreground], tokens[background]); const ok = value >= minimum; console.log(`${ok ? "OK" : "NG"} ${name}: ${value.toFixed(2)} (最低 ${minimum})`); failed ||= !ok; }
+// 便箋は0〜30日で #fffdf5 / #1a1a1a からこの終端色へ連続的に移る。
+// 終端を検査すれば、本文を透明化せず最低比を保つ設計を守れる。
+const letterPaper = "#e8d9ad";
+const letterInk = "#685c45";
+const letterRatio = ratio(letterInk, letterPaper);
+const letterOk = letterRatio >= 4.5;
+console.log(`${letterOk ? "OK" : "NG"} 便箋本文 / 30日後の紙: ${letterRatio.toFixed(2)} (最低 4.5)`);
+failed ||= !letterOk;
+if (failed) process.exitCode = 1;

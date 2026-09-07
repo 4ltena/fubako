@@ -1,12 +1,8 @@
 /**
  * 伏せ判定。ここが製品の心臓。
  *
- * 読み手の地雷語（MuteRule）と投稿のタグを突き合わせる。
- * - 読み手が自分でその投稿を伏せていれば、他の条件に関係なく伏せる
- * - 地雷宣言をしていない読み手には何も伏せない
- * - 地雷宣言をしている読み手に対して、タグの無い投稿は「未確認」として伏せる
- * - タグが地雷語と一致（正規化後の完全一致、または語を含む）すれば伏せる
- * - 書き手の注意文（cw）があれば地雷宣言より優先して伏せる
+ * 本文・注意文・タグと、読み手本人の登録語だけを突き合わせる。
+ * 他人の登録語は取得も返却もしない。
  *
  * 伏せた理由には種類（kind）を付ける。読み手に見せる文言を分けるためで、
  * 種類そのものは新しい情報を渡さない（reason から同じ区別が付く）。
@@ -22,42 +18,51 @@ export type VeilKind = "self" | "cw" | "mute" | "unconfirmed";
 
 export type Veil = { veiled: false } | { veiled: true; reason: string; kind: VeilKind };
 
+export type VeilContent = {
+  body: string;
+  cw?: string | null;
+  tags: readonly string[];
+};
+
 export type VeilOptions = {
   /** 読み手がこの投稿を自分で伏せているか。 */
   selfVeiled?: boolean;
 };
 
-/** NFKC・小文字・前後空白除去。全角/半角と大小の違いで漏らさない。 */
+/** NFKC・小文字・カタカナからひらがな・前後空白除去。語中の記号や空白は残す。 */
 export function normalizeWord(word: string): string {
-  return word.normalize("NFKC").toLowerCase().trim();
+  return word
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[\u30a1-\u30f6]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0x60))
+    .trim();
+}
+
+function matches(text: string, mute: string): boolean {
+  return normalizeWord(text).includes(mute);
 }
 
 export function veilFor(
-  tags: readonly string[],
+  content: VeilContent,
   muteWords: readonly string[],
-  cw?: string | null,
   options: VeilOptions = {},
 ): Veil {
-  // 読み手自身が閉じた紙。取り消せる操作なので、他のどの理由より先に効かせる。
   if (options.selfVeiled) return { veiled: true, reason: "自分で伏せています", kind: "self" };
 
-  const warning = cw?.trim();
-  if (warning) return { veiled: true, reason: warning, kind: "cw" };
-
-  const mutes = muteWords.map(normalizeWord).filter((w) => w.length > 0);
-  if (mutes.length === 0) return { veiled: false };
-
-  const normalizedTags = tags.map(normalizeWord).filter((t) => t.length > 0);
-  if (normalizedTags.length === 0) return { veiled: true, reason: UNCONFIRMED, kind: "unconfirmed" };
-
-  for (const tag of normalizedTags) {
-    for (const mute of mutes) {
-      if (tag === mute || tag.includes(mute)) {
-        // 表示する理由は読み手が登録した語（元の表記）
-        const original = muteWords.find((w) => normalizeWord(w) === mute) ?? mute;
-        return { veiled: true, reason: original, kind: "mute" };
-      }
+  const mutes = muteWords
+    .map((original) => ({ original, normalized: normalizeWord(original) }))
+    .filter(({ normalized }) => normalized.length > 0);
+  const searchable = [content.body, content.cw ?? "", ...content.tags];
+  for (const mute of mutes) {
+    if (searchable.some((text) => matches(text, mute.normalized))) {
+      return { veiled: true, reason: mute.original, kind: "mute" };
     }
+  }
+
+  const warning = content.cw?.trim();
+  if (warning) return { veiled: true, reason: warning, kind: "cw" };
+  if (mutes.length > 0 && !content.tags.some((tag) => normalizeWord(tag).length > 0)) {
+    return { veiled: true, reason: UNCONFIRMED, kind: "unconfirmed" };
   }
   return { veiled: false };
 }

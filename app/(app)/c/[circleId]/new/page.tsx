@@ -3,14 +3,14 @@ import { notFound } from "next/navigation";
 import { NewPostForm } from "@/components/NewPostForm";
 import { currentUserId } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { declaredWordsFor, isMember } from "@/lib/timeline";
+import { isMember } from "@/lib/timeline";
 import { suggestedTags } from "@/lib/tags";
 
 export default async function NewPostPage({ params }: { params: Promise<{ circleId: string }> }) {
   const { circleId } = await params;
   const userId = (await currentUserId())!;
   if (!(await isMember(userId, circleId))) notFound();
-  const [suggested, declaredWords] = await Promise.all([suggestedTags(circleId), declaredWordsFor(circleId)]);
+  const suggested = await suggestedTags(circleId, userId);
   const circle = (await prisma.circle.findUnique({ where: { id: circleId }, select: { name: true } }))!;
   return (
     <div>
@@ -20,7 +20,7 @@ export default async function NewPostPage({ params }: { params: Promise<{ circle
         <span className="label invisible text-xs">とじる</span>
       </div>
       {/* 書きかけの鍵は人ごとに分ける。同じ端末を別の人が使っても混ざらない */}
-      <NewPostForm circleId={circleId} suggested={suggested} declaredWords={declaredWords} draftKey={`${userId}:${circleId}`} />
+      <NewPostForm circleId={circleId} suggested={suggested} draftKey={`${userId}:${circleId}`} />
     </div>
   );
 }

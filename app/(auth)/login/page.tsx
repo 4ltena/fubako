@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth, signIn } from "@/lib/auth";
+import { isTemporaryLoginAllowed } from "@/lib/auth-policy";
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ dev?: string; password?: string }> }) {
   if ((await auth())?.user) redirect("/");
@@ -8,7 +9,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const passwordWrong = sp.password === "wrong";
   const discordEnabled = Boolean(process.env.AUTH_DISCORD_ID);
   const emailEnabled = Boolean(process.env.EMAIL_SERVER);
-  const passwordLoginEnabled = process.env.PASSWORD_LOGIN === "1";
+  const passwordLoginEnabled = isTemporaryLoginAllowed("password");
   return (
     <main className="mx-auto w-full max-w-md flex-1 px-5 pt-16">
       <h1 className="text-3xl leading-[1.6] font-bold">ふばこ</h1>

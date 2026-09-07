@@ -1,10 +1,19 @@
 import { ActionButton } from "@/components/ActionButton";
+import { TopicMuteControls } from "@/components/TopicMuteControls";
 import { currentUserId } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
 export default async function MutesPage() {
   const userId = (await currentUserId())!;
-  const rules = await prisma.muteRule.findMany({ where: { userId }, orderBy: { createdAt: "asc" } });
+  const [rules, topicRules] = await Promise.all([
+    prisma.muteRule.findMany({ where: { userId }, orderBy: { createdAt: "asc" } }),
+    // 退出した箱の語も、箱名を読まずに本人が外せるようにする。
+    prisma.topicMute.findMany({ where: { userId }, orderBy: { createdAt: "asc" }, select: { id: true, circleId: true, word: true } }),
+  ]);
+  const topicRulesByCircle = topicRules.reduce<Record<string, { id: string; word: string }[]>>((groups, rule) => {
+    (groups[rule.circleId] ??= []).push({ id: rule.id, word: rule.word });
+    return groups;
+  }, {});
   return (
     <div>
       <header className="flex flex-col gap-4 border-b border-line pb-4">
@@ -33,9 +42,19 @@ export default async function MutesPage() {
         <p className="text-[13px] leading-[2.1] text-ink-dim">
           {rules.length > 0
             ? "語を宣言しているので、タグのない投稿も「未確認」として伏せています。判定は安全な側に倒します。書いた人の落ち度ではありません。"
-            : "まだ何も宣言していないので、何も伏せていません。書いた人が注意文を付けた投稿だけが伏せて届きます。"}
+            : "語はまだ宣言していません。書いた人が注意文を付けた投稿や、自分で伏せた紙は伏せたまま届きます。"}
         </p>
       </div>
+
+      {topicRules.length > 0 && <section className="mt-6 space-y-3 border-b border-line pb-5" aria-labelledby="topic-mutes-settings-title">
+        <div className="space-y-1">
+          <h2 id="topic-mutes-settings-title" className="text-[16px] font-bold">見るまで伏せる話題</h2>
+          <p className="text-[13px] leading-[1.9] text-ink-dim">以前いた箱で登録した話題も、ここから外せます。箱の名前やほかの参加者の情報は表示しません。</p>
+        </div>
+        {Object.entries(topicRulesByCircle).map(([circleId, groupedRules]) => <TopicMuteControls key={circleId} circleId={circleId} initialRules={groupedRules} allowAdd={false} />)}
+      </section>}
+
+      <a href="/settings/reading" className="label mt-6 inline-flex min-h-11 items-center text-[12px] text-ink-dim underline underline-offset-4">文字と紙面の見え方を調整する</a>
 
       <p className="label mt-6 text-[11px] text-ink-faint">漏れていたら、その紙の「…」からその場で伏せられます</p>
     </div>

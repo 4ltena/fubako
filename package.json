@@ -3,8 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "next dev --webpack",
+    "preview:build": "node scripts/build-ui-preview.mjs",
+    "preview:serve": "node scripts/serve-ui-preview.mjs",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
@@ -18,7 +20,9 @@
     "verify:tokenizer": "node scripts/verify-tokenizer.mjs",
     "contrast": "node scripts/contrast.mjs",
     "warm": "node scripts/keepwarm.mjs",
-    "db:migrate": "prisma migrate deploy"
+    "db:migrate": "prisma migrate deploy",
+    "deploy:check": "node scripts/check-deploy-env.mjs",
+    "test:migrations": "node scripts/verify-migrations.mjs"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",
@@ -42,6 +46,7 @@
     "sharp": "^0.35.4"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.4.3",
     "@tailwindcss/postcss": "^4",
     "@types/kuromoji": "^0.1.3",
     "@types/node": "^20",
@@ -54,6 +59,9 @@
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.11"
+  },
+  "engines": {
+    "node": "24.x"
   },
   "allowScripts": {
     "prisma": true,

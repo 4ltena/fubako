@@ -2,21 +2,35 @@
 import "dotenv/config";
 import pg from "pg";
 import sharp from "sharp";
+import { assertLocalFixtureEnvironment } from "./local-fixture-guard.mjs";
+
+const BASE = process.env.APP_URL ?? "http://localhost:3000";
+assertLocalFixtureEnvironment(process.env, { appUrl: BASE });
+
 const db = new pg.Client({ connectionString: process.env.DATABASE_URL }); await db.connect();
 const prisma = {
   user: { upsert: async ({ where: { email }, create: { name } }) => (await db.query('INSERT INTO "User"(id,email,name) VALUES($1,$2,$3) ON CONFLICT(email) DO UPDATE SET name=EXCLUDED.name RETURNING *', [crypto.randomUUID(), email, name])).rows[0] },
-  session: { create: async ({ data: d }) => (await db.query('INSERT INTO "Session"(id,"sessionToken","userId",expires) VALUES($1,$2,$3,$4) RETURNING *', [crypto.randomUUID(), d.sessionToken, d.userId, d.expires])).rows[0] },
+  session: { create: async ({ data: d }) => (await db.query('INSERT INTO "Session"(id,"sessionToken","userId",expires,"authMethod") VALUES($1,$2,$3,$4,\'demo\') RETURNING *', [crypto.randomUUID(), d.sessionToken, d.userId, d.expires])).rows[0] },
   post: { findUnique: async ({ where: { id } }) => (await db.query('SELECT * FROM "Post" WHERE id=$1', [id])).rows[0] },
   $disconnect: () => db.end(),
 };
-const BASE = "http://localhost:3000";
 const expires = new Date(Date.now() + 86400e3);
 async function sessionFor(email, name) {
   const user = await prisma.user.upsert({ where: { email }, update: {}, create: { email, name } });
   const s = await prisma.session.create({ data: { userId: user.id, sessionToken: crypto.randomUUID(), expires } });
   return (path, init = {}) => {
+    const requestInit = { ...init };
+    if (path === "/api/posts" && requestInit.method === "POST") {
+      if (requestInit.body instanceof FormData) {
+        if (!requestInit.body.has("clientRequestId")) requestInit.body.set("clientRequestId", crypto.randomUUID().replaceAll("-", ""));
+      } else {
+        const payload = typeof requestInit.body === "string" ? JSON.parse(requestInit.body) : {};
+        if (!payload.clientRequestId) payload.clientRequestId = crypto.randomUUID().replaceAll("-", "");
+        requestInit.body = JSON.stringify(payload);
+      }
+    }
     const headers = Object.fromEntries(Object.entries({ cookie: `authjs.session-token=${s.sessionToken}`, "content-type": "application/json", ...(init.headers ?? {}) }).filter(([, v]) => v !== undefined));
-    return fetch(BASE + path, { ...init, headers, redirect: "manual" });
+    return fetch(BASE + path, { ...requestInit, headers, redirect: "manual" });
   };
 }
 const assert = (c, m) => { if (!c) { console.error("FAIL:", m); process.exit(1); } console.log("ok:", m); };
@@ -28,9 +42,32 @@ const circle = await (await A("/api/circles", { method: "POST", body: JSON.strin
 assert(circle.id && circle.inviteCode, "サークル作成");
 assert((await B("/api/posts?circleId=" + circle.id)).status === 404, "非会員には存在が見えない");
 assert((await B("/api/circles/join", { method: "POST", body: JSON.stringify({ inviteCode: circle.inviteCode }) })).ok, "招待コードで参加");
+const initialInvite = circle.inviteCode;
+const disabledInvite = await (await A("/api/circles/invites", { method: "POST", body: JSON.stringify({ circleId: circle.id, action: "disable" }) })).json();
+assert(disabledInvite.inviteCode === null && disabledInvite.invitesEnabled === false, "招待を失効できる");
+const regeneratedInvite = await (await A("/api/circles/invites", { method: "POST", body: JSON.stringify({ circleId: circle.id, action: "regenerate" }) })).json();
+assert(regeneratedInvite.invitesEnabled && regeneratedInvite.inviteCode && regeneratedInvite.inviteCode !== initialInvite, "招待を再発行できる");
+circle.inviteCode = regeneratedInvite.inviteCode;
+const members = await (await A(`/api/circles/${circle.id}/members`)).json();
+assert(Array.isArray(members.members) && !("count" in members) && !("activity" in members), "参加者管理は人数や活動量を返さない");
 const p1 = await (await A("/api/posts", { method: "POST", body: JSON.stringify({ circleId: circle.id, body: "ネタバレ本文", tags: "ネタバレ #最終回", days: "30" }) })).json();
 const p2 = await (await A("/api/posts", { method: "POST", body: JSON.stringify({ circleId: circle.id, body: "タグなし本文" }) })).json();
 const p3 = await (await A("/api/posts", { method: "POST", body: JSON.stringify({ circleId: circle.id, body: "無害本文", tags: "推し" }) })).json();
+const retryRequestId = "retry" + crypto.randomUUID().replaceAll("-", "");
+const retryPayload = { circleId: circle.id, body: "再送しても一通", clientRequestId: retryRequestId };
+const retryFirst = await (await A("/api/posts", { method: "POST", body: JSON.stringify(retryPayload) })).json();
+const retrySecond = await (await A("/api/posts", { method: "POST", body: JSON.stringify(retryPayload) })).json();
+assert(retryFirst.id && retrySecond.id === retryFirst.id, "同じ clientRequestId の再送は同じ投稿を返す");
+assert((await A("/api/posts", { method: "POST", body: JSON.stringify({ ...retryPayload, body: "内容を変えた再送" }) })).status === 409, "同じ clientRequestId で本文を変えると 409");
+assert((await (await A(`/api/posts/${p3.id}/afterword`, { method: "PUT", body: JSON.stringify({ afterword: "あとから思い出したこと" }) })).json()).afterword === "あとから思い出したこと", "本人だけの後書きを保存できる");
+assert((await (await A(`/api/posts/${p3.id}/afterword`)).json()).afterword === "あとから思い出したこと", "本人の後書きを読み返せる");
+assert((await B(`/api/posts/${p3.id}/afterword`)).status === 404, "他人には後書きが見えない");
+assert((await (await B(`/api/circles/archive`, { method: "POST", body: JSON.stringify({ circleId: circle.id, archived: "true" }) })).json()).archived === true, "箱をしまえる");
+assert((await (await B(`/api/circles/archive`, { method: "POST", body: JSON.stringify({ circleId: circle.id, archived: "false" }) })).json()).archived === false, "しまった箱を戻せる");
+assert((await (await B(`/api/posts/${p3.id}/react`, { method: "POST" })).json()).reacted === true, "明示的な反応を送れる");
+const ownerTimeline = (await (await A("/api/posts?circleId=" + circle.id)).json()).posts;
+const received = ownerTimeline.find((p) => p.id === p3.id);
+assert(received.received === true && !("reactionCount" in received) && !("reactorIds" in received), "本人には反応が届いたことだけを示す");
 let tl = (await (await B("/api/posts?circleId=" + circle.id)).json()).posts;
 assert(tl.length === 3 && tl.every((p) => !p.veiled && p.body), "地雷宣言なしなら全部開いている");
 const dbP1 = await prisma.post.findUnique({ where: { id: p1.id } });
@@ -70,9 +107,11 @@ const v4 = tl.find((p) => p.id === p4.id);
 assert(v4.veiled && v4.reason === "写真あり" && !("body" in v4) && !("imageIds" in v4), "注意文つきは地雷宣言に関係なく伏せられ、本文も画像 ID も無い");
 assert(v4.images.length === 2 && v4.images.every((i) => i.blurhash && i.width === 300 && !("id" in i) && !("url" in i)), "伏せた投稿には blurhash と寸法だけがある");
 assert(!JSON.stringify(v4).includes("/api/images/"), "伏せた応答に取得先が無い");
+const veiledImageId = (await db.query('SELECT id FROM "Image" WHERE "postId"=$1 ORDER BY "createdAt"', [p4.id])).rows[0].id;
+assert((await B(`/api/images/${veiledImageId}`)).status === 404, "伏せた画像は許可証なしでは取れない");
 const opened = await (await B(`/api/posts/${p4.id}/reveal`)).json();
-assert(opened.body === "画像つき本文" && opened.imageIds.length === 2, "reveal で本文と画像 ID が取れる");
-const img = await B(`/api/images/${opened.imageIds[0]}`);
+assert(opened.body === "画像つき本文" && opened.imageIds.length === 2 && opened.imageGrant, "reveal で本文・画像 ID・画像許可証が取れる");
+const img = await B(`/api/images/${opened.imageIds[0]}?grant=${encodeURIComponent(opened.imageGrant)}`);
 assert(img.ok && img.headers.get("content-type") === "image/webp" && img.headers.get("cache-control").includes("private") && img.headers.get("x-robots-tag") === "noindex", "画像本体が WebP で取れる");
 const C = await sessionFor("c@example.test", "C");
 assert((await C(`/api/images/${opened.imageIds[0]}`)).status === 404, "非会員は画像を取れない");
@@ -177,9 +216,7 @@ const missForm = await E("/api/circles/join", { method: "POST", headers: { "cont
 assert(missForm.status === 303 && missForm.headers.get("location").includes("join=miss"), "画面から入り損ねたら JSON を出さずに戻す");
 
 // 箱を出る
-assert((await E("/api/circles/leave", { method: "POST", body: JSON.stringify({ circleId: circle.id, word: "ちがうことば" }) })).status === 400, "言葉が違えば出られない");
-assert((await E("/api/posts?circleId=" + circle.id)).ok, "出られていない");
-assert((await E("/api/circles/leave", { method: "POST", body: JSON.stringify({ circleId: circle.id, word: katakana }) })).ok, "言葉を書き写せば出られる");
+assert((await E("/api/circles/leave", { method: "POST", body: JSON.stringify({ circleId: circle.id }) })).ok, "確認後は招待語の再入力なしで出られる");
 assert((await E("/api/posts?circleId=" + circle.id)).status === 404, "出たら箱は見えなくなる");
 assert((await E("/api/circles/join", { method: "POST", body: JSON.stringify({ inviteCode: circle.inviteCode }) })).ok, "同じ言葉でまた入れる");
 
@@ -193,7 +230,7 @@ assert((await F("/api/circles/join", { method: "POST", body: JSON.stringify({ in
 const fPost = await (await F("/api/posts", { method: "POST", body: withImg, headers: { "content-type": undefined } })).json();
 const fImg = (await (await F(`/api/posts/${fPost.id}/reveal`)).json()).imageIds[0];
 assert((await F(`/api/images/${fImg}`)).ok, "出る前は自分の画像が取れる");
-assert((await F("/api/circles/leave", { method: "POST", body: JSON.stringify({ circleId: circle.id, word: circle.inviteCode }) })).ok, "F が出る");
+assert((await F("/api/circles/leave", { method: "POST", body: JSON.stringify({ circleId: circle.id }) })).ok, "F が出る");
 assert((await F(`/api/images/${fImg}`)).ok, "出たあとも、自分が書いた紙の画像は自分に取れる");
 assert((await C(`/api/images/${fImg}`)).status === 404, "非会員は相変わらず取れない");
 
