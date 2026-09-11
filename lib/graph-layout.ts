@@ -7,7 +7,7 @@ export type GraphPoint = { id: string; x: number; y: number };
 export function expandGraph(existing: readonly string[], selected: string, nodes: readonly { id: string; related?: RelatedPost[] }[], limit = GRAPH_LIMIT): string[] {
   const allowed = new Set(nodes.map((node) => node.id));
   if (!allowed.has(selected)) return existing.filter((id) => allowed.has(id)).slice(0, limit);
-  return [...new Set([...existing.filter((id) => allowed.has(id)), selected, ...(nodes.find((node) => node.id === selected)?.related ?? []).map((link) => link.postId)])]
+  return [...new Set([selected, ...(nodes.find((node) => node.id === selected)?.related ?? []).map((link) => link.postId), ...existing.filter((id) => allowed.has(id))])]
     .filter((id) => allowed.has(id)).slice(0, limit);
 }
 

@@ -7,8 +7,8 @@
  * 閾値はすべて暫定。根拠は無く、使ってみて動かす前提でここに集めてある。
  */
 import { tokenize, type Token, type TokenizeOptions } from "./morph.ts";
-import { isSimilar } from "./similarity-graph";
-export { isSimilar, HEAVY_HEAD, COMMON_MATCH_MIN } from "./similarity-graph";
+import { isSimilar } from "./similarity-graph.ts";
+export { isSimilar, HEAVY_HEAD, COMMON_MATCH_MIN } from "./similarity-graph.ts";
 
 /** 保存する語の上限。 */
 export const MAX_TERMS = 20;
