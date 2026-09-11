@@ -2,7 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/db";
 import type { Form } from "@/lib/form";
 import { presentToday, shouldTouchSeen } from "@/lib/presence";
-import { pickSimilar } from "@/lib/similar";
+import { relatedPosts, type RelatedPost } from "@/lib/similarity-graph";
 import { jstStamp } from "@/lib/stamp";
 import { veilFor, type VeilKind } from "@/lib/veil";
 import { isVisibleTo } from "@/lib/visibility";
@@ -30,7 +30,7 @@ export type TimelinePost = {
   reacted: boolean;
   images: TimelineImage[];
 } & (
-  | { veiled: false; body: string; imageIds: string[]; form: Form; tags: string[]; similar?: { postId: string }; received?: boolean }
+  | { veiled: false; body: string; imageIds: string[]; form: Form; tags: string[]; similar?: { postId: string }; related?: RelatedPost[]; received?: boolean }
   | { veiled: true; reason: string; kind: VeilKind; received?: boolean }
 );
 
@@ -97,13 +97,16 @@ export async function timelineFor(userId: string, circleId: string): Promise<Tim
   ]);
   // 伏せ判定を先に済ませてから突き合わせる。伏せられる投稿へは案内しない。
   const entries = posts
-    .filter((p) => isVisibleTo(p, userId, now))
+    .filter((p) => p.visibility === "circle" && isVisibleTo(p, userId, now))
     .map((p) => ({
       post: p,
       veil: p.authorId === userId ? ({ veiled: false } as const) : veilFor({ body: p.body, cw: p.cw, tags: p.tags }, mutes, { selfVeiled: p.veils.length > 0 }),
     }));
   // 突き合わせの相手は、いま読み手のタイムラインに載っている投稿だけ（飛び先の無い案内を出さない）。
-  const candidates = entries.map((e) => ({ id: e.post.id, authorId: e.post.authorId, terms: e.post.terms, veiled: e.veil.veiled }));
+  const candidates = entries.map(({ post: p }) => ({
+    id: p.id, authorId: p.authorId, terms: p.terms,
+    veiled: p.expiresAt <= now || veilFor({ body: p.body, cw: p.cw, tags: p.tags }, mutes, { selfVeiled: p.veils.length > 0 }).veiled,
+  }));
 
   return entries
     .map(({ post: p, veil }) => {
@@ -121,7 +124,8 @@ export async function timelineFor(userId: string, circleId: string): Promise<Tim
       };
       if (veil.veiled) return { ...common, veiled: true as const, reason: veil.reason, kind: veil.kind };
       // 自分の投稿には出さない。相手が伏せられる投稿でも出さない（pickSimilar が落とす）。
-      const similar = p.authorId === userId ? null : pickSimilar(candidates.find((c) => c.id === p.id)!, candidates);
+      const related = relatedPosts(candidates.find((c) => c.id === p.id)!, candidates);
+      const similar = p.authorId === userId || !related.length ? null : { postId: related[0].postId };
       return {
         ...common,
         veiled: false as const,
@@ -130,6 +134,7 @@ export async function timelineFor(userId: string, circleId: string): Promise<Tim
         form: p.form as Form,
         tags: p.tags,
         ...(similar ? { similar } : {}),
+        ...(related.length ? { related } : {}),
       };
     });
 }

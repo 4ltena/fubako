@@ -2,6 +2,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { PostCard } from "@/components/PostCard";
+import { RelatedPostGraph } from "@/components/RelatedPostGraph";
 import type { TimelinePost } from "@/lib/timeline";
 
 /** 新しい紙を見にいく間隔。押し出さないので、短くしない。 */
@@ -21,6 +22,7 @@ export function PostList({ posts, wears, circleId }: { posts: TimelinePost[]; we
   const [busy, setBusy] = useState(false);
   const [fresh, setFresh] = useState(false);
   const [error, setError] = useState("");
+  const [graphRoot, setGraphRoot] = useState<string | null>(null);
   const opening = useRef(false);
   const router = useRouter();
   // 1枚も無い箱でも、開いたときから後に置かれた紙は拾う
@@ -84,6 +86,11 @@ export function PostList({ posts, wears, circleId }: { posts: TimelinePost[]; we
 
   return (
     <>
+      {posts.some((post) => !post.mine) && (
+        <p className="label border-b border-line py-3 text-[12px] leading-[1.9] text-ink-dim">
+          「書いた人に届ける」は、この紙への反応です。書いた人の「じぶんの箱」に「届いています」と表示されます。名前や人数は表示されません。
+        </p>
+      )}
       {fresh && (
         <div className="flex items-center gap-3 border-b border-line py-3">
           <span className="label text-[12px] text-ink-dim">新しい紙がとどいています</span>
@@ -109,8 +116,16 @@ export function PostList({ posts, wears, circleId }: { posts: TimelinePost[]; we
         </button>
       )}
       {posts.map((p) => (
-        <PostCard key={p.id} post={p} wear={wears[p.id] ?? 0} preopened={opened[p.id] ?? null} onVeiled={forget} onClosed={forget} />
+        <PostCard key={p.id} post={p} wear={wears[p.id] ?? 0} preopened={opened[p.id] ?? null} onVeiled={forget} onClosed={forget} onExplore={setGraphRoot} />
       ))}
+      {graphRoot && <RelatedPostGraph key={graphRoot} rootId={graphRoot} posts={posts} onClose={() => setGraphRoot(null)} onGoToPost={(id) => {
+        setGraphRoot(null);
+        requestAnimationFrame(() => {
+          const paper = document.getElementById(`post-${id}`);
+          paper?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth", block: "center" });
+          paper?.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true });
+        });
+      }} />}
       {error && <p role="alert" className="label py-3 text-[12px] text-ink-dim">{error}</p>}
     </>
   );

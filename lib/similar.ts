@@ -7,13 +7,11 @@
  * 閾値はすべて暫定。根拠は無く、使ってみて動かす前提でここに集めてある。
  */
 import { tokenize, type Token, type TokenizeOptions } from "./morph.ts";
+import { isSimilar } from "./similarity-graph";
+export { isSimilar, HEAVY_HEAD, COMMON_MATCH_MIN } from "./similarity-graph";
 
 /** 保存する語の上限。 */
 export const MAX_TERMS = 20;
-/** terms の先頭何語を「重い語」とみなすか。extractTerms は固有名詞を先頭に置く。 */
-export const HEAVY_HEAD = 3;
-/** 重い語で一致しないときに必要な共通語数。 */
-export const COMMON_MATCH_MIN = 2;
 /** 「その書き手が今語っている対象」を測るために遡る、同じサークルでの直近の投稿数。 */
 export const RECENT_BODIES = 5;
 
@@ -53,34 +51,12 @@ export function rankTerms(tokens: readonly Token[], recentTokens: readonly (read
     .map(([word]) => word);
 }
 
-/**
- * 投稿から語を取り出す。作成時に1回だけ呼ぶ。
- * MeCab が無ければ空配列（投稿は通り、近い投稿の行が出ないだけ）。
- */
+/** 投稿時に語を抽出する。辞書が読めなければ空配列で投稿を続ける。 */
 export async function extractTerms(body: string, authorRecentBodies: readonly string[] = [], options: TokenizeOptions = {}): Promise<string[]> {
   const tokens = await tokenize(body, options);
   if (tokens.length === 0) return [];
   const recent = await Promise.all(authorRecentBodies.slice(0, RECENT_BODIES).map((b) => tokenize(b, options)));
   return rankTerms(tokens, recent);
-}
-
-/**
- * 近いとみなすか。
- * - 重い語（先頭 HEAVY_HEAD 語。固有名詞が来る）が1つ以上共通
- * - または語全体で COMMON_MATCH_MIN 語以上共通
- */
-export function isSimilar(a: readonly string[], b: readonly string[]): boolean {
-  if (a.length === 0 || b.length === 0) return false;
-  const headB = new Set(b.slice(0, HEAVY_HEAD));
-  for (const w of a.slice(0, HEAVY_HEAD)) {
-    if (headB.has(w)) return true;
-  }
-  const all = new Set(b);
-  let shared = 0;
-  for (const w of new Set(a)) {
-    if (all.has(w) && ++shared >= COMMON_MATCH_MIN) return true;
-  }
-  return false;
 }
 
 export type Candidate = {

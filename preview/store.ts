@@ -3,6 +3,7 @@ import type { TimelinePost } from "@/lib/timeline";
 import { exportHeading, exportRecord } from "@/lib/export-records";
 import { jstMonth, jstStamp } from "@/lib/stamp";
 import { normalizeWord, veilFor } from "@/lib/veil";
+import { relatedPosts } from "@/lib/similarity-graph";
 
 /** UI確認だけに使う、ログイン済みの架空の利用者。 */
 export const PREVIEW_USER_ID = "preview-me";
@@ -104,6 +105,12 @@ function initialState(): PreviewState {
       },
     ],
     posts: [
+      ...[
+        { id: "preview-graph-song", authorName: "あお", body: "新曲を聴きながら、ライブで見た青い光を思い出していた。あの続きを、また同じ場所で聴けたら。", tags: ["新曲", "ライブ"] },
+        { id: "preview-graph-piano", authorName: "しおり", body: "ライブの最後に響いたピアノ。一音ずつ、遠い窓に明かりがともるようだった。", tags: ["ライブ", "ピアノ"] },
+        { id: "preview-graph-night", authorName: "なぎ", body: "ピアノの余韻と、静かな夜。読みかけの本を閉じるまで、音の中を歩いていた。", tags: ["ピアノ", "夜"] },
+        { id: "preview-graph-book", authorName: "こはく", body: "夜の読書には、急がない音楽が似合う。今日の物語にも、ひとつ栞を。", tags: ["夜", "読書"] },
+      ].map((post) => ({ ...post, circleId: "preview-room", mine: false, cw: null, createdAt: iso(0, 8), expiresAt: iso(7, 8), afterword: "", received: false, reacted: false, selfVeiled: false, imageIds: [], form: "text" as const, visibility: "circle" as const })),
       {
         id: "preview-mine-received", circleId: "preview-room", authorName: "わたし", mine: true,
         body: "最後の一音が、まだ耳に残っている。", cw: null, tags: ["新曲", "余韻"],
@@ -274,9 +281,9 @@ export function previewImageUrl(imageId: string | null | undefined) {
 export function timelineForPreview(circleId: string): TimelinePost[] {
   const now = new Date();
   const muted = [...state.mutes.map((mute) => mute.word), ...state.topicMutes.filter((mute) => mute.circleId === circleId).map((mute) => mute.word)];
-  return state.posts
+  const posts: TimelinePost[] = state.posts
     // 最初から自分だけに保存した紙は、書いた本人にも箱の並びには出さない。
-    .filter((post) => post.circleId === circleId && post.visibility === "circle")
+    .filter((post) => post.circleId === circleId && post.visibility === "circle" && (post.mine || Date.parse(post.expiresAt) > now.getTime()))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .map((post) => {
       const base = {
@@ -297,6 +304,16 @@ export function timelineForPreview(circleId: string): TimelinePost[] {
       if (veil.veiled) return { ...base, veiled: true as const, reason: veil.reason, kind: veil.kind };
       return { ...base, veiled: false as const, body: post.body, imageIds: [...post.imageIds], form: post.form, tags: [...post.tags] };
     });
+  // 架空データのタグを語として使う。本番はサーバーで本文を形態素解析する。
+  const candidates = posts.map((post) => {
+    const original = state.posts.find((item) => item.id === post.id)!;
+    return { id: post.id, authorId: original.mine ? PREVIEW_USER_ID : original.authorName, terms: original.tags, veiled: post.returned || veilFor(original, muted, { selfVeiled: original.selfVeiled }).veiled };
+  });
+  return posts.map((post) => {
+    if (post.veiled) return post;
+    const related = relatedPosts(candidates.find((candidate) => candidate.id === post.id)!, candidates);
+    return { ...post, ...(related.length ? { related, ...(!post.mine ? { similar: { postId: related[0].postId } } : {}) } : {}) };
+  });
 }
 
 function blobUrl(blob: Blob): string {

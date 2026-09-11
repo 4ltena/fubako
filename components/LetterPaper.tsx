@@ -12,7 +12,7 @@ const DAY_MS = 86_400_000;
  * 投稿の中身を便箋として見せる器。初回HTMLは常に書いた直後の紙にし、
  * hydration 後にだけ端末時刻から経年を反映するので、SSR とクライアントでずれない。
  */
-export function LetterPaper({ createdAt, ageDays, children }: { createdAt: string; ageDays?: number; children: ReactNode }) {
+export function LetterPaper({ createdAt, ageDays, children, as: Element = "div" }: { createdAt: string; ageDays?: number; children: ReactNode; as?: "div" | "span" }) {
   const previewAgeDays = useContext(PaperAgeContext);
   const { preferences } = useReadingPreferences();
   const fixedAgeDays = ageDays ?? previewAgeDays;
@@ -35,5 +35,5 @@ export function LetterPaper({ createdAt, ageDays, children }: { createdAt: strin
     "--paper-age": `${(age * 100).toFixed(2)}%`,
     "--paper-rule-alpha": (0.19 - age * 0.12).toFixed(3),
   } as CSSProperties;
-  return <div className={`letter-paper${preferences.paperEffects ? "" : " letter-paper--plain"}`} style={style}>{children}</div>;
+  return <Element className={`letter-paper${preferences.paperEffects ? "" : " letter-paper--plain"}`} style={style}>{children}</Element>;
 }
