@@ -74,12 +74,17 @@ export function PostCard({
   preopened = null,
   onVeiled,
   onClosed,
+  onExplore,
+  presentation = false,
 }: {
   post: TimelinePost;
   wear?: number;
   preopened?: { body: string; imageIds: string[]; imageGrant?: string } | null;
   onVeiled?: (postId: string) => void;
   onClosed?: (postId: string) => void;
+  onExplore?: (postId: string) => void;
+  /** グラフの移動演出では同じ便箋を表示するが、投稿操作はTLで行う。 */
+  presentation?: boolean;
 }) {
   // 開いた本文はサーバから取り直したものだけを持つ。一時的に閉じても保存状態は変えない。
   const [revealed, setRevealed] = useState<{ body: string; imageIds: string[]; imageGrant?: string } | null>(null);
@@ -94,6 +99,7 @@ export function PostCard({
   const tags = post.veiled ? [] : post.tags;
 
   function goToSimilar() {
+    if (onExplore) { onExplore(post.id); return; }
     const el = similarId === null ? null : document.getElementById(`post-${similarId}`);
     if (el === null) return;
     const before = window.scrollY;
@@ -239,7 +245,7 @@ export function PostCard({
   }
 
   return (
-    <article id={`post-${post.id}`} className="border-b border-line py-4">
+    <article id={presentation ? undefined : `post-${post.id}`} inert={presentation} className={presentation ? "related-graph__post" : "border-b border-line py-4"}>
       <LetterPaper createdAt={post.createdAt}>
       <Meta name={post.authorName} at={post.createdAt} stamp={post.stamp} note={post.returned ? "自分だけに表示" : undefined} trailing={menu} />
       <PostBody form={form} body={opened.body} imageIds={opened.imageIds} imageGrant={opened.imageGrant} />
@@ -263,7 +269,7 @@ export function PostCard({
           近いことを書いた人がいます
         </button>
       )}
-      <div className="mt-2.5 flex items-center gap-2">
+      <div className="mt-2.5 flex flex-wrap items-center gap-2">
         {tags.map((t) => (
           <span key={t} className="label text-[12px] text-ink-faint">
             <span className="text-ink-faint/70">#</span>{t}
@@ -273,11 +279,11 @@ export function PostCard({
           <button
             onClick={react}
             aria-pressed={reacted}
-            aria-label={reacted ? "届いた" : "届ける"}
+            aria-label={reacted ? "書いた人への反応を取り消す" : "書いた人に届ける"}
             disabled={loading}
             className={`label ml-auto flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-1.5 rounded-full border px-4 text-[12px] ${reacted ? "border-ink bg-ink text-paper" : "border-line-2 text-ink-dim"}`}
           >
-            {reacted ? "届いた" : "届ける"}
+            {reacted ? "届けました · 取り消す" : "書いた人に届ける"}
           </button>
         )}
         {post.mine && "received" in post && post.received && <span className="label ml-auto text-[12px] text-ink-dim">届いています</span>}

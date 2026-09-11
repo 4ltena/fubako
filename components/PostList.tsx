@@ -1,7 +1,8 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { PostCard } from "@/components/PostCard";
+import { RelatedPostGraph, type PaperOrigin } from "@/components/RelatedPostGraph";
 import type { TimelinePost } from "@/lib/timeline";
 
 /** 新しい紙を見にいく間隔。押し出さないので、短くしない。 */
@@ -21,11 +22,24 @@ export function PostList({ posts, wears, circleId }: { posts: TimelinePost[]; we
   const [busy, setBusy] = useState(false);
   const [fresh, setFresh] = useState(false);
   const [error, setError] = useState("");
+  const [graphRoot, setGraphRoot] = useState<{ id: string; origin: PaperOrigin } | null>(null);
+  const jumpTarget = useRef<string | null>(null);
   const opening = useRef(false);
   const router = useRouter();
   // 1枚も無い箱でも、開いたときから後に置かれた紙は拾う
   const [openedAt] = useState(() => new Date().toISOString());
   const newest = posts[0]?.createdAt ?? openedAt;
+
+  useLayoutEffect(() => {
+    if (graphRoot || !jumpTarget.current) return;
+    const paper = document.getElementById(`post-${jumpTarget.current}`);
+    jumpTarget.current = null;
+    if (!paper) return;
+    // dialogを閉じ、TLのinertが解除された後に移動とフォーカスを行う。
+    (paper.querySelector(".letter-paper") ?? paper).scrollIntoView({ behavior: "instant", block: "center" });
+    paper.tabIndex = -1;
+    paper.focus({ preventScroll: true });
+  }, [graphRoot]);
 
   // 新しい紙が来たかを、画面が前面のときだけ見にいく。件数は聞かないし、
   // 来ていても並びは変えない（読み手が「読みこむ」を押すまで動かさない）。
@@ -84,6 +98,11 @@ export function PostList({ posts, wears, circleId }: { posts: TimelinePost[]; we
 
   return (
     <>
+      {posts.some((post) => !post.mine) && (
+        <p className="label border-b border-line py-3 text-[12px] leading-[1.9] text-ink-dim">
+          「書いた人に届ける」は、この紙への反応です。書いた人の「じぶんの箱」に「届いています」と表示されます。名前や人数は表示されません。
+        </p>
+      )}
       {fresh && (
         <div className="flex items-center gap-3 border-b border-line py-3">
           <span className="label text-[12px] text-ink-dim">新しい紙がとどいています</span>
@@ -109,8 +128,17 @@ export function PostList({ posts, wears, circleId }: { posts: TimelinePost[]; we
         </button>
       )}
       {posts.map((p) => (
-        <PostCard key={p.id} post={p} wear={wears[p.id] ?? 0} preopened={opened[p.id] ?? null} onVeiled={forget} onClosed={forget} />
+        <PostCard key={p.id} post={p} wear={wears[p.id] ?? 0} preopened={opened[p.id] ?? null} onVeiled={forget} onClosed={forget} onExplore={(id) => {
+          const paper = document.getElementById(`post-${id}`)?.querySelector(".letter-paper");
+          if (!paper) return;
+          const { x, y, width, height } = paper.getBoundingClientRect();
+          setGraphRoot({ id, origin: { x, y, width, height } });
+        }} />
       ))}
+      {graphRoot && <RelatedPostGraph key={graphRoot.id} rootId={graphRoot.id} origin={graphRoot.origin} posts={posts} onClose={() => setGraphRoot(null)} onGoToPost={(id) => {
+        jumpTarget.current = id;
+        setGraphRoot(null);
+      }} />}
       {error && <p role="alert" className="label py-3 text-[12px] text-ink-dim">{error}</p>}
     </>
   );
