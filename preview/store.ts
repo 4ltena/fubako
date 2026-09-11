@@ -4,6 +4,7 @@ import { exportHeading, exportRecord } from "@/lib/export-records";
 import { jstMonth, jstStamp } from "@/lib/stamp";
 import { normalizeWord, veilFor } from "@/lib/veil";
 import { relatedPosts } from "@/lib/similarity-graph";
+import { moonGardenDemo } from "./moon-garden-demo";
 
 /** UI確認だけに使う、ログイン済みの架空の利用者。 */
 export const PREVIEW_USER_ID = "preview-me";
@@ -103,8 +104,20 @@ function initialState(): PreviewState {
         bans: [],
         joined: true,
       },
+      {
+        id: "preview-starlight", name: "星あかりの余白",
+        description: "架空の舞台『月舟の庭』から、登場人物や場面の感想をたどるためのデモです。",
+        inviteCode: "ほしあかりをあつめて", invitesEnabled: true, archived: false, managerId: PREVIEW_USER_ID,
+        members: [{ id: PREVIEW_USER_ID, name: "わたし" }, ...["しおり", "なぎ", "こはく"].map((name) => ({ id: `preview-${name}`, name }))],
+        bans: [], joined: true,
+      },
     ],
     posts: [
+      ...moonGardenDemo.map((post, index) => ({
+        id: `preview-moon-${post.slug}`, circleId: "preview-starlight", authorName: post.name, mine: false,
+        body: post.body, tags: post.tags, cw: null, createdAt: new Date(new Date(iso(0, 8)).getTime() - index * 240_000).toISOString(), expiresAt: iso(7, 8),
+        afterword: "", received: false, reacted: false, selfVeiled: false, imageIds: [], form: "text" as const, visibility: "circle" as const,
+      })),
       ...[
         { id: "preview-graph-song", authorName: "あお", body: "新曲を聴きながら、ライブで見た青い光を思い出していた。あの続きを、また同じ場所で聴けたら。", tags: ["新曲", "ライブ"] },
         { id: "preview-graph-piano", authorName: "しおり", body: "ライブの最後に響いたピアノ。一音ずつ、遠い窓に明かりがともるようだった。", tags: ["ライブ", "ピアノ"] },

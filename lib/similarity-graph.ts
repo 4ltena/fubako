@@ -1,6 +1,7 @@
 /** 語そのものはサーバーに留め、ブラウザーへは関連IDと強さだけを渡す。 */
 export const HEAVY_HEAD = 3;
 export const COMMON_MATCH_MIN = 2;
+export const RELATED_POST_LIMIT = 10;
 export type RelatedPost = { postId: string; strength: number };
 type Candidate = { id: string; authorId: string; terms: readonly string[]; veiled: boolean };
 
@@ -32,5 +33,5 @@ export function relatedPosts(target: Candidate, candidates: readonly Candidate[]
     .map((other) => ({ postId: other.id, strength: similarityStrength(target.terms, other.terms) }))
     .filter((link) => link.strength > 0)
     .sort((a, b) => b.strength - a.strength || a.postId.localeCompare(b.postId))
-    .slice(0, 8);
+    .slice(0, RELATED_POST_LIMIT);
 }

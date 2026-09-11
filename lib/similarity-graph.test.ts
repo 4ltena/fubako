@@ -18,9 +18,18 @@ describe("投稿の類似グラフ", () => {
   it("点を選ぶたびに隣接先が広がり、既存の点を保持して上限を守る", () => {
     const nodes = [{ id: "a", related: [{ postId: "b", strength: 1 }] }, { id: "b", related: [{ postId: "c", strength: .5 }] }, { id: "c", related: [] }];
     expect(expandGraph([], "a", nodes)).toEqual(["a", "b"]);
-    expect(expandGraph(["a", "b"], "b", nodes)).toEqual(["a", "b", "c"]);
-    expect(expandGraph(["a", "b"], "b", nodes, 2)).toEqual(["a", "b"]);
+    expect(expandGraph(["a", "b"], "b", nodes)).toEqual(["b", "c", "a"]);
+    expect(expandGraph(["a", "b"], "b", nodes, 2)).toEqual(["b", "c"]);
     expect(expandGraph(["deleted", "a"], "a", nodes)).toEqual(["a", "b"]);
+  });
+  it("安全な関連投稿を10件まで返し、各投稿からも次の関連をたどれる", () => {
+    const candidates = Array.from({ length: 18 }, (_, i) => ({ id: `post-${i.toString().padStart(2, "0")}`, authorId: `author-${i % 3}`, terms: ["月舟の庭", "舞台", "歌声"], veiled: false }));
+    const links = relatedPosts(candidates[0], candidates);
+    expect(links).toHaveLength(10);
+    expect(links.every((link) => candidates.find((post) => post.id === link.postId)?.authorId !== candidates[0].authorId)).toBe(true);
+    const next = candidates.find((post) => post.id === links[0].postId)!;
+    expect(relatedPosts(next, candidates)).toHaveLength(10);
+    expect(relatedPosts(next, candidates)).toContainEqual({ postId: candidates[0].id, strength: 1 });
   });
   it("中心は原点で、強い近傍を近く配置し、孤立点も有限の座標を持つ", () => {
     const layout = layoutGraph(["a", "b", "c"], "a", [{ source: "a", target: "b", strength: .9 }, { source: "a", target: "c", strength: .2 }]);
