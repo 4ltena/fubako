@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(fileURLToPath(new URL("../public/ui-preview/", import.meta.url)));
 const port = Number(process.env.PREVIEW_PORT ?? 3000);
 if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error("PREVIEW_PORT は1024〜65535で指定してください。");
-const mime = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".woff2": "font/woff2" };
+const mime = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; charset=utf-8", ".wasm": "application/wasm", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".woff2": "font/woff2" };
 await readFile(path.join(root, "index.html"));
 
 const server = http.createServer(async (req, res) => {

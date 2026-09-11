@@ -1,8 +1,11 @@
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { build } from "vite";
+import { cp } from "node:fs/promises";
+import { prepareFaceCheck } from "./prepare-face-check.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
+await prepareFaceCheck(root);
 
 await build({
   configFile: false,
@@ -43,4 +46,5 @@ await build({
     minify: true,
   },
 });
+await cp(path.join(root, "public/face-check"), path.join(root, "public/ui-preview/face-check"), { recursive: true });
 console.log("表示確認: http://127.0.0.1:3000/ui-preview/index.html");

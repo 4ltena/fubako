@@ -2,11 +2,15 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { browserStore, clearDraft, type Draft, type DraftVisibility, loadDraft, saveCurrentDraft } from "@/lib/draft";
+import { FaceCheckClient } from "@/lib/face-check-client";
+import { faceSubmissionState, type FaceResult } from "@/lib/face-check";
+import { FaceImageNotice } from "@/components/FaceImageNotice";
+import { FaceImageReview } from "@/components/FaceImageReview";
 
 const MAX_EDGE = 2048;
 const MAX_IMAGES = 4;
 const DAYS = [7, 1, 3];
-type ImageItem = { blob: Blob; url: string };
+type ImageItem = { id: string; blob: Blob; url: string };
 
 async function shrink(file: File): Promise<Blob> {
   const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
@@ -27,6 +31,12 @@ export function NewPostForm({ circleId, suggested, draftKey, afterPost = "push" 
   const [days, setDays] = useState(7);
   const [visibility, setVisibility] = useState<DraftVisibility>("circle");
   const [images, setImages] = useState<ImageItem[]>([]);
+  const [faceResults, setFaceResults] = useState<Record<string, FaceResult>>({});
+  const [faceCheck] = useState(() => new FaceCheckClient(setFaceResults));
+  const [confirmed, setConfirmed] = useState(false);
+  const confirmation = useRef<{ generation: number; visibility: DraftVisibility } | null>(null);
+  const [reviewId, setReviewId] = useState<string | null>(null);
+  const photoHeading = useRef<HTMLHeadingElement>(null);
   const [busy, setBusy] = useState(false);
   const [picking, setPicking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,6 +52,7 @@ export function NewPostForm({ circleId, suggested, draftKey, afterPost = "push" 
   const generation = useRef(0);
 
   function newRequest() { requestId.current = crypto.randomUUID(); }
+  function clearConfirmation() { confirmation.current = null; setConfirmed(false); }
   function revoke(items: ImageItem[]) { items.forEach((image) => URL.revokeObjectURL(image.url)); }
   function saveCurrent() {
     if (!ready.current || submitting.current) return;
@@ -53,12 +64,15 @@ export function NewPostForm({ circleId, suggested, draftKey, afterPost = "push" 
     if ("cw" in next) setCw(next.cw!);
     if ("tags" in next) setTags(next.tags!);
     if ("days" in next) setDays(next.days!);
-    if ("visibility" in next) setVisibility(next.visibility!);
+    if ("visibility" in next) { setVisibility(next.visibility!); clearConfirmation(); }
     newRequest();
     saveCurrent();
   }
   function replaceImages(next: ImageItem[]) {
     imagesRef.current = next;
+    clearConfirmation();
+    faceCheck.setImages(next);
+    setReviewId((old) => next.some((image) => image.id === old) ? old : null);
     setImages(next);
   }
   function resetImages() {
@@ -73,6 +87,7 @@ export function NewPostForm({ circleId, suggested, draftKey, afterPost = "push" 
     const restore = setTimeout(() => {
       const saved = loadDraft(draftKey, browserStore(), Date.now());
       draftRef.current = saved;
+      setImages([]); setFaceResults({}); setReviewId(null); setConfirmed(false); confirmation.current = null;
       setBody(saved.body); setCw(saved.cw); setTags(saved.tags); setDays(saved.days); setVisibility(saved.visibility);
       setWritingTag(Boolean(saved.tags)); setWritingCw(Boolean(saved.cw));
       newRequest(); ready.current = true; setReadyState(true);
@@ -82,8 +97,9 @@ export function NewPostForm({ circleId, suggested, draftKey, afterPost = "push" 
       generation.current += 1;
       revoke(imagesRef.current);
       imagesRef.current = [];
+      faceCheck.dispose();
     };
-  }, [draftKey]);
+  }, [draftKey, faceCheck]);
 
   function discard() {
     if (busy) return;
@@ -104,7 +120,7 @@ export function NewPostForm({ circleId, suggested, draftKey, afterPost = "push" 
       for (const file of Array.from(files).slice(0, remaining)) {
         const blob = await shrink(file);
         if (generation.current !== pickGeneration || submitting.current) { revoke(created); return; }
-        created.push({ blob, url: URL.createObjectURL(blob) });
+        created.push({ id: crypto.randomUUID(), blob, url: URL.createObjectURL(blob) });
       }
       if (generation.current === pickGeneration && !submitting.current) {
         replaceImages([...imagesRef.current, ...created]);
@@ -132,6 +148,8 @@ export function NewPostForm({ circleId, suggested, draftKey, afterPost = "push" 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (submitting.current || picking || !ready.current) return;
+    const faces = faceSubmissionState(imagesRef.current.map((image) => image.id), faceCheck.results);
+    if (faces.checking || (faces.needsConfirmation && (confirmation.current?.generation !== faceCheck.generation || confirmation.current?.visibility !== draftRef.current.visibility))) return;
     submitting.current = true;
     setBusy(true); setError(null);
     const snapshot = draftRef.current;
@@ -161,17 +179,27 @@ export function NewPostForm({ circleId, suggested, draftKey, afterPost = "push" 
 
   const chosen = tags.split(/\s+/).filter(Boolean);
   const formDisabled = busy || !readyState;
-  const submitDisabled = formDisabled || picking;
-  return <form onSubmit={submit} className="space-y-5">
+  const faces = faceSubmissionState(images.map((image) => image.id), faceResults);
+  const submitDisabled = formDisabled || picking || faces.checking || (faces.needsConfirmation && !confirmed);
+  const reviewImage = images.find((image) => image.id === reviewId);
+  return <><form onSubmit={submit} className="space-y-5">
     <fieldset disabled={formDisabled} className="space-y-5 disabled:opacity-60">
       <label className="sr-only" htmlFor="post-body">本文</label>
       <textarea id="post-body" name="body" value={body} required={images.length === 0} maxLength={2000} rows={5} autoFocus onChange={(event) => setDraft({ body: event.target.value })} placeholder={images.length ? "写真だけでもいい" : "雑に投げる"} className="block w-full resize-none border-b border-line bg-transparent pb-3 text-[17px] leading-[1.9] placeholder:text-ink-faint focus:outline-none" />
       <div className="flex items-center gap-3"><span className="label text-[12px] text-ink-dim">書きかけはこの端末に24時間残ります</span><button type="button" onClick={discard} className="label ml-auto min-h-11 shrink-0 px-2 text-[12px] text-ink-dim underline underline-offset-4">捨てる</button></div>
-      {images.length > 0 && <><ul className="grid grid-cols-4 gap-2">{images.map((image, index) => <li key={image.url} className="relative">
+      <h3 ref={photoHeading} tabIndex={-1} className="sr-only">添付する写真</h3>
+      {images.length > 0 && <><ul className="grid grid-cols-4 gap-2">{images.map((image, index) => <li key={image.id} className="relative">
+        <button type="button" onClick={() => setReviewId(image.id)} aria-label={`写真${index + 1}を拡大して確認`} className="block min-h-11 w-full">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={image.url} alt="" className="aspect-square w-full object-cover" />
-        <button type="button" onClick={() => removeImage(index)} aria-label="写真を外す" className="absolute right-1 top-1 flex size-11 items-center justify-center bg-paper/90 text-sm">×</button>
+        </button>
+        <button type="button" disabled={picking} onClick={() => removeImage(index)} aria-label={`写真${index + 1}を外す`} className="absolute right-1 top-1 flex size-11 items-center justify-center bg-paper/90 text-sm">×</button>
       </li>)}</ul><p className="label text-[12px] text-ink-dim">写真はこの画面を離れると残りません。</p></>}
+      <FaceImageNotice images={images} results={faceResults} visibility={visibility} confirmed={confirmed} onReview={setReviewId} onConfirm={(checked) => {
+        if (faceSubmissionState(imagesRef.current.map((image) => image.id), faceCheck.results).checking) return;
+        confirmation.current = checked ? { generation: faceCheck.generation, visibility: draftRef.current.visibility } : null;
+        setConfirmed(checked);
+      }} />
       <div className="flex flex-wrap items-center gap-2">
         {images.length < MAX_IMAGES && <button type="button" disabled={picking} onClick={() => fileRef.current?.click()} aria-label="写真を追加する" className="label flex size-11 items-center justify-center rounded-full border border-line-2 text-[17px] text-ink-dim">＋</button>}
         <input ref={fileRef} disabled={picking} type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple onChange={(event) => void pick(event.target.files)} className="hidden" />
@@ -197,6 +225,6 @@ export function NewPostForm({ circleId, suggested, draftKey, afterPost = "push" 
       {visibility === "circle" && <><div className="label flex items-center gap-3 text-[12px]">{DAYS.map((day) => <button key={day} type="button" onClick={() => setDraft({ days: day })} aria-pressed={days === day} className={`min-h-11 min-w-11 px-1 ${days === day ? "text-ink underline underline-offset-4" : "text-ink-dim"}`}>{`${day}日間公開`}</button>)}</div></>}
     </fieldset>
     {error && <p role="alert" className="label text-[12px] leading-[1.8] text-ink">{error}</p>}
-    <button disabled={submitDisabled} className="label min-h-11 w-full rounded-full bg-ink py-3 text-sm tracking-[0.2em] text-paper disabled:opacity-50">{picking ? "写真を準備しています…" : busy ? visibility === "private" ? "保存しています…" : "投げています…" : visibility === "private" ? "自分だけに保存" : "投げる"}</button>
-  </form>;
+    <button disabled={submitDisabled} className="label min-h-11 w-full rounded-full bg-ink py-3 text-sm tracking-[0.2em] text-paper disabled:opacity-50">{picking ? "写真を準備しています…" : faces.checking ? "写真を確認中…" : busy ? visibility === "private" ? "保存しています…" : "投げています…" : visibility === "private" ? "自分だけに保存" : "投げる"}</button>
+  </form>{reviewImage && <FaceImageReview key={reviewImage.id} url={reviewImage.url} number={images.indexOf(reviewImage) + 1} result={faceResults[reviewImage.id]} onClose={() => setReviewId(null)} fallbackFocus={photoHeading} />}</>;
 }

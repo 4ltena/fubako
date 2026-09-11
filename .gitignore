@@ -17,6 +17,7 @@
 /.next/
 /out/
 /public/ui-preview/
+/public/face-check/
 
 # production
 /build
